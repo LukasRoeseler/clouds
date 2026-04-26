@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#05080d" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="description" content="CloudGen — Procedural 3D cloud atlas (WMO genera) for pilots and aviation enthusiasts." />
-<title>CloudGen — Procedural Cloud Atlas (WMO)</title>
+<meta name="description" content="Cloude — Procedural 3D cloud atlas (WMO genera) for pilots and aviation enthusiasts. Created with Claude." />
+<title>Cloude — Procedural Cloud Atlas (WMO)</title>
 
 <!-- Inline SVG favicon: dark dashboard background, cyan cloud, accent sun -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='b' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%2305080d'/><stop offset='1' stop-color='%2318263a'/></linearGradient><radialGradient id='s' cx='0.5' cy='0.5' r='0.5'><stop offset='0' stop-color='%23fff0c8'/><stop offset='1' stop-color='%23fff0c8' stop-opacity='0'/></radialGradient></defs><rect width='64' height='64' rx='12' fill='url(%23b)'/><circle cx='46' cy='20' r='12' fill='url(%23s)'/><circle cx='46' cy='20' r='5' fill='%23fff0c8'/><path d='M14 44 q0 -10 10 -10 q2 -8 11 -8 q9 0 11 8 q9 0 9 9 q0 6 -7 6 H21 q-7 0 -7 -5 z' fill='%2300d2ff' opacity='0.92'/><path d='M14 44 q0 -10 10 -10 q2 -8 11 -8 q9 0 11 8 q9 0 9 9 q0 6 -7 6 H21 q-7 0 -7 -5 z' fill='none' stroke='%2300ffae' stroke-width='1' opacity='0.5'/></svg>" />
@@ -209,6 +209,45 @@
   button.danger:hover { background: rgba(255, 92, 92, 0.12); }
   button.success { border-color: var(--ok); color: var(--ok); }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Segmented toggle (single / field) */
+  .segmented {
+    display: flex;
+    background: var(--bg-2);
+    border: 1px solid var(--line-2);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .segmented button {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--txt-mute);
+    padding: 7px 10px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.15s;
+  }
+  .segmented button:hover {
+    color: var(--accent);
+    background: transparent;
+  }
+  .segmented button.active {
+    background: var(--bg-3);
+    color: var(--accent);
+    box-shadow: inset 0 0 0 1px rgba(0, 210, 255, 0.3);
+  }
+  .segmented button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    color: var(--txt-mute);
+  }
+  .segmented button:disabled:hover { color: var(--txt-mute); }
 
   /* Slider */
   input[type="range"] {
@@ -872,7 +911,7 @@
   <header class="hud-top">
     <div class="brand">
       <span class="dot"></span>
-      <span>CloudGen / WMO Atlas v1.0</span>
+      <span>Cloude / WMO Atlas v1.0</span>
     </div>
     <div class="meta">
       <div>UTC <b id="utc-time">--:--:--</b></div>
@@ -890,6 +929,14 @@
       <label>Genus (WMO)</label>
       <div class="select-wrap">
         <select id="cloud-select"></select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Scene Mode</label>
+      <div class="segmented" id="mode-toggle">
+        <button data-mode="single" class="active">◉ Single</button>
+        <button data-mode="field">⋮⋮ Field</button>
       </div>
     </div>
 
@@ -980,6 +1027,13 @@
           <label>Genus (WMO)</label>
           <div class="select-wrap">
             <select id="m-cloud-select"></select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Scene Mode</label>
+          <div class="segmented" id="m-mode-toggle">
+            <button data-mode="single" class="active">◉ Single</button>
+            <button data-mode="field">⋮⋮ Field</button>
           </div>
         </div>
         <div class="btn-row" style="margin-bottom: 6px;">
@@ -1401,6 +1455,495 @@ stars.renderOrder = -0.5;
 scene.add(stars);
 
 /* =====================================================
+   4a. BEACH ENVIRONMENT (procedural ground, water, mountain, palms, gulls)
+   ===================================================== */
+const ENV_GROUND_Y = -25;        // sea level
+const ENV_BEACH_Y  = ENV_GROUND_Y + 1.2;
+const ENV_MOUNTAIN_HEIGHT = 200; // 200m reference
+
+// Shared uniforms so environment can sync with sky/sun
+const envUniforms = {
+  uTime:      { value: 0 },
+  uSunDir:    skyUniforms.uSunDir,    // shared reference
+  uSunColor:  skyUniforms.uSunColor,  // shared reference
+  uSunInt:    skyUniforms.uSunIntensity,
+  uHorizon:   skyUniforms.uHorizonColor,
+  uAmbient:   { value: new THREE.Color(0x6680a0) }, // synced from setTimeOfDay
+  uAmbientI:  { value: 0.7 }
+};
+
+// ---- Sand beach (large heightmapped plane, dune-ish) ----
+function makeBeach() {
+  const SIZE = 4000;
+  const SEG = 96;
+  const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
+  geo.rotateX(-Math.PI / 2);
+  // Deform vertices with fbm to give dunes
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const z = pos.getZ(i);
+    // Distance from origin — beach near origin, mountain far
+    const r = Math.sqrt(x * x + z * z) / SIZE;
+    const noise = fbm2D(x * 0.005 + 100, z * 0.005 + 100, 5);
+    const dunes = noise * 6 * Math.min(1, r * 2.5);
+    pos.setY(i, dunes);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: envUniforms.uTime,
+      uSunDir: envUniforms.uSunDir,
+      uSunColor: envUniforms.uSunColor,
+      uSunInt: envUniforms.uSunInt,
+      uAmbient: envUniforms.uAmbient,
+      uAmbientI: envUniforms.uAmbientI,
+      uHorizon: envUniforms.uHorizon,
+      uFogColor: { value: scene.fog.color },
+      uFogDensity: { value: scene.fog.density }
+    },
+    vertexShader: /* glsl */`
+      varying vec3 vNormal;
+      varying vec3 vWorldPos;
+      varying float vDistFromOrigin;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
+        vDistFromOrigin = length(position.xz);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */`
+      uniform vec3 uSunDir;
+      uniform vec3 uSunColor;
+      uniform float uSunInt;
+      uniform vec3 uAmbient;
+      uniform float uAmbientI;
+      uniform vec3 uHorizon;
+      uniform vec3 uFogColor;
+      uniform float uFogDensity;
+      varying vec3 vNormal;
+      varying vec3 vWorldPos;
+      varying float vDistFromOrigin;
+
+      // Hash for noise
+      float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+
+      void main() {
+        // Sand color varies subtly: lighter near water, slightly darker at dunes
+        vec3 sandWet = vec3(0.78, 0.69, 0.55);
+        vec3 sandDry = vec3(0.92, 0.85, 0.68);
+        // Use distance from origin as beach proximity proxy: <100 = beach, >300 = inland
+        float beachMix = smoothstep(40.0, 200.0, vDistFromOrigin);
+        vec3 baseSand = mix(sandWet, sandDry, beachMix);
+        // Grain texture
+        float grain = h(floor(vWorldPos.xz * 2.0)) * 0.08;
+        baseSand += grain - 0.04;
+
+        // Lighting
+        vec3 N = normalize(vNormal);
+        float ndl = max(dot(N, normalize(uSunDir)), 0.0);
+        vec3 lit = baseSand * (uAmbient * uAmbientI + uSunColor * uSunInt * ndl);
+
+        // Fog
+        float dist = length(vWorldPos - cameraPosition);
+        float fogFactor = 1.0 - exp(-uFogDensity * dist * dist);
+        vec3 finalCol = mix(lit, uFogColor, clamp(fogFactor, 0.0, 1.0));
+
+        gl_FragColor = vec4(finalCol, 1.0);
+      }
+    `,
+    side: THREE.DoubleSide
+  });
+
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.y = ENV_GROUND_Y;
+  return mesh;
+}
+
+// ---- Ocean (animated wave shader) ----
+function makeOcean() {
+  // Half-disk of water on one side (negative X side = ocean, positive X = beach/mountain)
+  const SIZE = 4000;
+  const geo = new THREE.PlaneGeometry(SIZE, SIZE, 64, 64);
+  geo.rotateX(-Math.PI / 2);
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: envUniforms.uTime,
+      uSunDir: envUniforms.uSunDir,
+      uSunColor: envUniforms.uSunColor,
+      uSunInt: envUniforms.uSunInt,
+      uHorizon: envUniforms.uHorizon,
+      uAmbient: envUniforms.uAmbient,
+      uAmbientI: envUniforms.uAmbientI,
+      uFogColor: { value: scene.fog.color },
+      uFogDensity: { value: scene.fog.density }
+    },
+    vertexShader: /* glsl */`
+      uniform float uTime;
+      varying vec3 vWorldPos;
+      varying vec3 vNormal;
+
+      // Simple sum-of-sines waves
+      float wave(vec2 p, vec2 dir, float wavelength, float speed, float amp, float t) {
+        float k = 6.283185 / wavelength;
+        float phase = dot(dir, p) * k - speed * t;
+        return amp * sin(phase);
+      }
+      void main() {
+        vec3 p = position;
+        float t = uTime;
+        float h = 0.0;
+        h += wave(p.xz, normalize(vec2(1.0, 0.6)), 28.0, 1.4, 0.55, t);
+        h += wave(p.xz, normalize(vec2(-0.5, 1.0)), 17.0, 1.7, 0.32, t);
+        h += wave(p.xz, normalize(vec2(0.7, -0.3)), 9.0, 2.1, 0.18, t);
+        p.y += h;
+
+        // Approx normal via partial derivatives of the wave functions
+        float eps = 0.5;
+        float hx = 0.0, hz = 0.0;
+        hx += wave(vec2(p.x + eps, p.z), normalize(vec2(1.0, 0.6)), 28.0, 1.4, 0.55, t);
+        hx += wave(vec2(p.x + eps, p.z), normalize(vec2(-0.5, 1.0)), 17.0, 1.7, 0.32, t);
+        hz += wave(vec2(p.x, p.z + eps), normalize(vec2(1.0, 0.6)), 28.0, 1.4, 0.55, t);
+        hz += wave(vec2(p.x, p.z + eps), normalize(vec2(-0.5, 1.0)), 17.0, 1.7, 0.32, t);
+        vec3 nrm = normalize(vec3(h - hx, eps, h - hz));
+        vNormal = (modelMatrix * vec4(nrm, 0.0)).xyz;
+
+        vec4 wp = modelMatrix * vec4(p, 1.0);
+        vWorldPos = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: /* glsl */`
+      uniform vec3 uSunDir;
+      uniform vec3 uSunColor;
+      uniform float uSunInt;
+      uniform vec3 uAmbient;
+      uniform float uAmbientI;
+      uniform vec3 uHorizon;
+      uniform vec3 uFogColor;
+      uniform float uFogDensity;
+      varying vec3 vWorldPos;
+      varying vec3 vNormal;
+
+      void main() {
+        vec3 N = normalize(vNormal);
+        vec3 V = normalize(cameraPosition - vWorldPos);
+        vec3 L = normalize(uSunDir);
+
+        // Deep water color, shallow water near beach is brighter teal
+        vec3 deep = vec3(0.04, 0.13, 0.22);
+        vec3 shallow = vec3(0.20, 0.45, 0.55);
+        // Distance from origin's beach edge (rough)
+        float beachProx = smoothstep(0.0, 200.0, length(vWorldPos.xz));
+        vec3 waterCol = mix(shallow, deep, beachProx);
+
+        // Diffuse-ish tint from sun
+        float ndl = max(dot(N, L), 0.0);
+        vec3 diffuse = waterCol * (uAmbient * uAmbientI + uSunColor * uSunInt * ndl * 0.4);
+
+        // Specular sun glint (Phong-like)
+        vec3 R = reflect(-L, N);
+        float spec = pow(max(dot(R, V), 0.0), 80.0);
+        vec3 glint = uSunColor * spec * uSunInt * 1.4;
+
+        // Fresnel — adds horizon-tinted reflection at grazing angles
+        float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
+        vec3 reflectionCol = mix(uHorizon, vec3(1.0), 0.2);
+        vec3 fresColor = reflectionCol * fres * (0.4 + uSunInt * 0.6);
+
+        vec3 col = diffuse + glint + fresColor;
+
+        // Fog
+        float dist = length(vWorldPos - cameraPosition);
+        float fogFactor = 1.0 - exp(-uFogDensity * dist * dist);
+        col = mix(col, uFogColor, clamp(fogFactor, 0.0, 1.0));
+
+        gl_FragColor = vec4(col, 0.95);
+      }
+    `,
+    transparent: true,
+    side: THREE.DoubleSide
+  });
+
+  const mesh = new THREE.Mesh(geo, mat);
+  // Place water on the negative-X side (beach faces it). Offset so beach is around origin.
+  mesh.position.set(-2000, ENV_GROUND_Y - 0.3, 0);
+  return mesh;
+}
+
+// ---- Reference mountain (200m high) ----
+function makeMountain() {
+  // Cone-based mountain with vertex deformation
+  const geo = new THREE.ConeGeometry(180, ENV_MOUNTAIN_HEIGHT, 28, 18);
+  // Deform vertices for natural ridges
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const r = Math.sqrt(x * x + z * z);
+    const heightT = (y + ENV_MOUNTAIN_HEIGHT / 2) / ENV_MOUNTAIN_HEIGHT; // 0 at base, 1 at peak
+    const ang = Math.atan2(z, x);
+    // Ridge noise
+    const ridge = fbm2D(ang * 4, heightT * 5, 4) * 18 * (1 - heightT * 0.7);
+    const newR = r + ridge;
+    pos.setX(i, Math.cos(ang) * newR);
+    pos.setZ(i, Math.sin(ang) * newR);
+    // Slight vertical noise
+    pos.setY(i, y + (fbm2D(x * 0.02, z * 0.02, 3) - 0.5) * 6);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: envUniforms.uTime,
+      uSunDir: envUniforms.uSunDir,
+      uSunColor: envUniforms.uSunColor,
+      uSunInt: envUniforms.uSunInt,
+      uAmbient: envUniforms.uAmbient,
+      uAmbientI: envUniforms.uAmbientI,
+      uHorizon: envUniforms.uHorizon,
+      uFogColor: { value: scene.fog.color },
+      uFogDensity: { value: scene.fog.density },
+      uPeakY: { value: ENV_GROUND_Y + ENV_MOUNTAIN_HEIGHT }
+    },
+    vertexShader: /* glsl */`
+      varying vec3 vNormal;
+      varying vec3 vWorldPos;
+      varying float vHeight;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
+        vHeight = wp.y;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: /* glsl */`
+      uniform vec3 uSunDir;
+      uniform vec3 uSunColor;
+      uniform float uSunInt;
+      uniform vec3 uAmbient;
+      uniform float uAmbientI;
+      uniform vec3 uHorizon;
+      uniform vec3 uFogColor;
+      uniform float uFogDensity;
+      uniform float uPeakY;
+      varying vec3 vNormal;
+      varying vec3 vWorldPos;
+      varying float vHeight;
+
+      void main() {
+        // Color band: rocky base -> grass-tinted mid -> snow cap
+        vec3 rock = vec3(0.32, 0.30, 0.27);
+        vec3 alpine = vec3(0.42, 0.46, 0.40);
+        vec3 snow = vec3(0.92, 0.94, 1.0);
+        float t = clamp(vHeight / uPeakY, 0.0, 1.0);
+        vec3 baseCol = mix(rock, alpine, smoothstep(0.05, 0.45, t));
+        baseCol = mix(baseCol, snow, smoothstep(0.62, 0.78, t));
+
+        vec3 N = normalize(vNormal);
+        float ndl = max(dot(N, normalize(uSunDir)), 0.0);
+        vec3 lit = baseCol * (uAmbient * uAmbientI + uSunColor * uSunInt * ndl);
+
+        // Fog
+        float dist = length(vWorldPos - cameraPosition);
+        float fogFactor = 1.0 - exp(-uFogDensity * dist * dist);
+        vec3 finalCol = mix(lit, uFogColor, clamp(fogFactor, 0.0, 1.0));
+
+        gl_FragColor = vec4(finalCol, 1.0);
+      }
+    `
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  // Place far inland (positive X), away from beach, so it's a horizon reference
+  mesh.position.set(700, ENV_GROUND_Y + ENV_MOUNTAIN_HEIGHT / 2, -300);
+  return mesh;
+}
+
+// ---- Palms (instanced, simple stylized) ----
+function makePalms() {
+  const group = new THREE.Group();
+  const PALM_COUNT = 12;
+  // Trunk material (shared)
+  const trunkMat = new THREE.MeshStandardMaterial({
+    color: 0x4a3220,
+    roughness: 0.95,
+    metalness: 0.0,
+    fog: true
+  });
+  // Frond material — flat green sprite-like plane
+  const frondMat = new THREE.MeshStandardMaterial({
+    color: 0x4a7a3a,
+    roughness: 0.7,
+    side: THREE.DoubleSide,
+    transparent: true,
+    fog: true
+  });
+
+  for (let i = 0; i < PALM_COUNT; i++) {
+    const palm = new THREE.Group();
+    const trunkH = 8 + Math.random() * 5;
+    // Trunk: cylinder slightly tapered (use CylinderGeometry with different radii)
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.35, 0.55, trunkH, 8),
+      trunkMat
+    );
+    trunk.position.y = trunkH / 2;
+    // Slight bend
+    trunk.rotation.z = (Math.random() - 0.5) * 0.25;
+    palm.add(trunk);
+
+    // Fronds: 6-8 elongated flat planes radiating from top
+    const frondCount = 6 + Math.floor(Math.random() * 3);
+    for (let f = 0; f < frondCount; f++) {
+      const frond = new THREE.Mesh(
+        new THREE.PlaneGeometry(5, 1.2),
+        frondMat
+      );
+      frond.position.y = trunkH;
+      const ang = (f / frondCount) * Math.PI * 2;
+      frond.position.x = Math.cos(ang) * 1.5;
+      frond.position.z = Math.sin(ang) * 1.5;
+      frond.rotation.y = ang;
+      // Tilt fronds upward then droop outward
+      frond.rotation.x = -0.3 + Math.random() * 0.2;
+      frond.rotation.z = -0.4 - Math.random() * 0.3;
+      // Slight scale variation
+      frond.scale.set(0.85 + Math.random() * 0.4, 0.8 + Math.random() * 0.3, 1);
+      palm.add(frond);
+    }
+
+    // Position palm randomly on beach (positive X-axis side, between water and inland)
+    // Beach band: 30..150 distance from origin
+    const ang = (Math.random() - 0.3) * Math.PI; // mostly facing the camera area
+    const r = 35 + Math.random() * 110;
+    palm.position.set(Math.cos(ang) * r, ENV_BEACH_Y, Math.sin(ang) * r);
+    palm.scale.setScalar(0.7 + Math.random() * 0.8);
+    palm.rotation.y = Math.random() * Math.PI * 2;
+    palm.userData.swayPhase = Math.random() * Math.PI * 2;
+    palm.userData.swayAmp = 0.04 + Math.random() * 0.04;
+
+    group.add(palm);
+  }
+
+  return group;
+}
+
+// ---- Seagull boids flock ----
+function makeGulls() {
+  const group = new THREE.Group();
+  const GULL_COUNT = 24;
+
+  // Build gull texture once: silhouette of a bird in flight (M-shape)
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#0d0d10';
+  ctx.beginPath();
+  // M-shape bird silhouette
+  ctx.moveTo(8, 36);
+  ctx.quadraticCurveTo(20, 18, 32, 32);
+  ctx.quadraticCurveTo(44, 18, 56, 36);
+  ctx.quadraticCurveTo(44, 30, 32, 36);
+  ctx.quadraticCurveTo(20, 30, 8, 36);
+  ctx.closePath();
+  ctx.fill();
+  // Anti-alias / soften
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+
+  // Second pose (wings down) for animation
+  const c2 = document.createElement('canvas');
+  c2.width = c2.height = 64;
+  const ctx2 = c2.getContext('2d');
+  ctx2.fillStyle = '#0d0d10';
+  ctx2.beginPath();
+  ctx2.moveTo(8, 32);
+  ctx2.quadraticCurveTo(20, 42, 32, 32);
+  ctx2.quadraticCurveTo(44, 42, 56, 32);
+  ctx2.quadraticCurveTo(44, 36, 32, 34);
+  ctx2.quadraticCurveTo(20, 36, 8, 32);
+  ctx2.closePath();
+  ctx2.fill();
+  const tex2 = new THREE.CanvasTexture(c2);
+  tex2.colorSpace = THREE.SRGBColorSpace;
+
+  const gullTextures = [tex, tex2];
+
+  for (let i = 0; i < GULL_COUNT; i++) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: gullTextures[0],
+      color: 0xffffff,
+      transparent: true,
+      depthWrite: false,
+      fog: true
+    }));
+    sprite.scale.set(2.5, 2.5, 1);
+    // Random initial position in a flock cloud
+    sprite.position.set(
+      (Math.random() - 0.5) * 200,
+      30 + Math.random() * 25,
+      (Math.random() - 0.5) * 200
+    );
+    sprite.userData.vel = new THREE.Vector3(
+      (Math.random() - 0.5) * 6,
+      (Math.random() - 0.5) * 1,
+      (Math.random() - 0.5) * 6
+    );
+    sprite.userData.flapPhase = Math.random() * Math.PI * 2;
+    sprite.userData.flapSpeed = 4 + Math.random() * 3;
+    group.add(sprite);
+  }
+  group.userData.textures = gullTextures;
+  return group;
+}
+
+// ---- Build & add environment ----
+const beachMesh = makeBeach();
+scene.add(beachMesh);
+const oceanMesh = makeOcean();
+scene.add(oceanMesh);
+const mountainMesh = makeMountain();
+scene.add(mountainMesh);
+const palmsGroup = makePalms();
+scene.add(palmsGroup);
+const gullsGroup = makeGulls();
+scene.add(gullsGroup);
+
+// Scale reference label sprite (text on canvas) showing "200m" at mountain peak
+function makeLabel(text) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.font = 'bold 28px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(40, 14, 176, 36);
+  ctx.strokeStyle = '#00d2ff';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(40, 14, 176, 36);
+  ctx.fillStyle = '#00d2ff';
+  ctx.fillText(text, 128, 32);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, fog: true });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(60, 15, 1);
+  return sprite;
+}
+const peakLabel = makeLabel('▲ 200m REF');
+peakLabel.position.set(700, ENV_GROUND_Y + ENV_MOUNTAIN_HEIGHT + 18, -300);
+scene.add(peakLabel);
+
+/* =====================================================
    4b. TIME-OF-DAY SYSTEM
    ===================================================== */
 let timeOfDay = 14.0; // hours, 0..24
@@ -1519,9 +2062,27 @@ function setTimeOfDay(hours) {
   ambientLight.color.copy(s.ambient);
   ambientLight.intensity = s.ambI;
 
+  // Sync environment uniforms
+  envUniforms.uAmbient.value.copy(s.ambient);
+  envUniforms.uAmbientI.value = s.ambI;
+
   // Fog: tint to horizon, density slightly higher at night/sunset
   scene.fog.color.copy(s.horizon).multiplyScalar(0.6);
   scene.fog.density = s.fogD;
+
+  // Update env shader fog uniforms (each material has its own copy of fog refs)
+  if (typeof beachMesh !== 'undefined' && beachMesh) {
+    beachMesh.material.uniforms.uFogColor.value.copy(scene.fog.color);
+    beachMesh.material.uniforms.uFogDensity.value = scene.fog.density;
+  }
+  if (typeof oceanMesh !== 'undefined' && oceanMesh) {
+    oceanMesh.material.uniforms.uFogColor.value.copy(scene.fog.color);
+    oceanMesh.material.uniforms.uFogDensity.value = scene.fog.density;
+  }
+  if (typeof mountainMesh !== 'undefined' && mountainMesh) {
+    mountainMesh.material.uniforms.uFogColor.value.copy(scene.fog.color);
+    mountainMesh.material.uniforms.uFogDensity.value = scene.fog.density;
+  }
 
   // Cloud lighting palette
   cloudTintColor.copy(s.sun).lerp(new THREE.Color(1, 1, 1), 0.4);
@@ -1543,7 +2104,10 @@ function setTimeOfDay(hours) {
   stars.material.opacity = Math.max(0, Math.min(0.9, starOp));
 
   // Update existing cloud lighting
-  if (currentCloudGroup) updateCloudLighting(currentCloudGroup);
+  if (currentCloudGroup) {
+    if (currentCloudGroup.userData.isField) updateCloudLightingDeep(currentCloudGroup);
+    else updateCloudLighting(currentCloudGroup);
+  }
   if (quizCloudGroup) updateCloudLighting(quizCloudGroup);
 }
 
@@ -1777,6 +2341,234 @@ function etageBaseHeight(def) {
 }
 
 /* =====================================================
+   5b. CLOUD FIELD (multi-cloud scatter)
+   ===================================================== */
+// Which cloud types make sense as a field (discrete formations).
+// Sheet/diffuse types (St, As, Cs, Ns) are inherently extended already; CB is too massive.
+const FIELD_ELIGIBLE = new Set(['Cu', 'Sc', 'Ac', 'Cc', 'Ci']);
+
+function isFieldEligible(typeKey) {
+  return FIELD_ELIGIBLE.has(typeKey);
+}
+
+function buildCloudField(typeKey, densityMultiplier = 1.0) {
+  const def = CLOUDS[typeKey];
+  if (!def) return null;
+
+  disposeGroup(currentCloudGroup);
+
+  // Container that holds N sub-cloud groups
+  const container = new THREE.Group();
+  container.userData.type = typeKey;
+  container.userData.def = def;
+  container.userData.isField = true;
+
+  // Number of clouds in field — much larger now for the "infinite" feel
+  const baseCount = (def.abbr === 'Cu' || def.abbr === 'Sc') ? 22 : 18;
+  const count = Math.max(8, Math.round(baseCount * (0.6 + densityMultiplier * 0.5)));
+
+  // Per-cloud density reduced more aggressively since there are many more clouds
+  const perCloudDensity = densityMultiplier * (def.abbr === 'Ci' ? 0.32 : 0.22);
+
+  // Shared texture
+  const tex = buildPuffTexture({
+    size: 256,
+    fibrous: !!def.fibrous,
+    dense: !!def.dense,
+    seed: typeKey.charCodeAt(0) + typeKey.charCodeAt(1)
+  });
+
+  // Layout: scatter clouds in a much larger area for "infinite" sky feeling
+  const fieldRadius = 800;
+  const baseHeight = etageBaseHeight(def);
+
+  // Use a low-discrepancy (golden angle) distribution
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  // Seeded RNG so the field looks deterministic per cloud type — gives a consistent
+  // "this Cumulus pattern" feel rather than re-shuffling on every minor update.
+  const seedBase = (typeKey.charCodeAt(0) * 73 + typeKey.charCodeAt(1) * 31) & 0xffff;
+  let rngState = seedBase;
+  function srand() {
+    rngState = (rngState * 1664525 + 1013904223) & 0xffffffff;
+    return ((rngState >>> 0) / 4294967295);
+  }
+
+  for (let i = 0; i < count; i++) {
+    // Spiral with seeded jitter
+    const t = (i + 0.5) / count;
+    const r = Math.sqrt(t) * fieldRadius * (0.4 + srand() * 0.8);
+    const theta = i * golden + srand() * 0.6;
+    const px = Math.cos(theta) * r + (srand() - 0.5) * 60;
+    const pz = Math.sin(theta) * r + (srand() - 0.5) * 60;
+    const py = (srand() - 0.5) * 14;
+
+    // Per-instance scale variation — bigger spread makes the field feel less uniform
+    const scaleVar = 0.45 + srand() * 1.0;
+
+    // Build a sub-cloud
+    const sub = buildSingleClump(def, tex, perCloudDensity, i * 17.31);
+    sub.position.set(px, py, pz);
+    sub.scale.setScalar(scaleVar);
+    sub.rotation.y = srand() * Math.PI * 2;
+    // Mark sub-cloud's "home" position so wind drift can wrap it cleanly
+    sub.userData.homePos = sub.position.clone();
+    sub.userData.scaleVar = scaleVar;
+
+    container.add(sub);
+  }
+
+  scene.add(container);
+  currentCloudGroup = container;
+  updateCloudLightingDeep(container);
+  return container;
+}
+
+// Updated lighting walker that descends into sub-groups
+function updateCloudLightingDeep(group) {
+  group.traverse(obj => {
+    if (obj.isSprite) {
+      const ud = obj.userData;
+      if (ud.litFactor === undefined) return;
+      const dayBoost = Math.max(0.15, sunWorldDir.y * 0.6 + 0.4);
+      const litMix = ud.litFactor;
+      const r = (cloudShadeColor.r * (1 - litMix) + cloudTintColor.r * litMix) * ud.baseShade * dayBoost;
+      const g = (cloudShadeColor.g * (1 - litMix) + cloudTintColor.g * litMix) * ud.baseShade * dayBoost;
+      const b = (cloudShadeColor.b * (1 - litMix) + cloudTintColor.b * litMix) * ud.baseShade * dayBoost;
+      obj.material.color.setRGB(r, g, b);
+    }
+  });
+}
+
+// Extract one cloud "clump" as a Group of sprites — reusable for field instances.
+// Mirrors the buildCloud body but returns a group instead of mounting to scene.
+function buildSingleClump(def, tex, densityMultiplier, seedOffset) {
+  const group = new THREE.Group();
+  group.userData.def = def;
+  const partCount = Math.max(20, Math.round(def.particles * densityMultiplier));
+  const baseHeight = etageBaseHeight(def);
+
+  for (let i = 0; i < partCount; i++) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex,
+      color: 0xffffff,
+      transparent: true,
+      opacity: def.opacity,
+      depthWrite: false,
+      depthTest: true,
+      blending: THREE.NormalBlending,
+      fog: true
+    }));
+
+    let px, py, pz, sx, sy;
+    const [spreadX, spreadY, spreadZ] = def.spread;
+    const [scaleX, scaleY, scaleZ] = def.scale;
+
+    if (def.isCb) {
+      // CB doesn't really make sense as a field, but support it
+      const t = i / partCount;
+      if (t < 0.55) {
+        const towerH = t / 0.55;
+        const ang = Math.random() * Math.PI * 2;
+        const radius = (8 + towerH * 26) * (0.6 + Math.random() * 0.5);
+        px = Math.cos(ang) * radius;
+        pz = Math.sin(ang) * radius;
+        py = baseHeight + towerH * 70 + (Math.random() - 0.5) * 8;
+        const s = scaleX * (0.85 + Math.random() * 0.6);
+        sx = s; sy = s * (0.85 + Math.random() * 0.4);
+      } else {
+        const anvilT = (t - 0.55) / 0.45;
+        const ang = Math.random() * Math.PI * 2;
+        const radius = 30 + anvilT * 90 + Math.random() * 18;
+        px = Math.cos(ang) * radius;
+        pz = Math.sin(ang) * radius;
+        py = baseHeight + 70 + Math.random() * 14 - anvilT * 4;
+        const s = scaleX * (1.4 + Math.random() * 0.8);
+        sx = s * 1.3; sy = s * 0.7;
+      }
+    } else if (def.puffy) {
+      const clusterCount = 4;
+      const clusterIdx = i % clusterCount;
+      const clusterAng = (clusterIdx / clusterCount) * Math.PI * 2;
+      const clusterRad = 20 + clusterIdx * 8;
+      const ccx = Math.cos(clusterAng) * clusterRad;
+      const ccz = Math.sin(clusterAng) * clusterRad;
+      const lr = Math.pow(Math.random(), 0.6) * 14;
+      const la = Math.random() * Math.PI * 2;
+      px = ccx + Math.cos(la) * lr;
+      pz = ccz + Math.sin(la) * lr;
+      py = baseHeight + Math.pow(Math.random(), 1.5) * scaleY * 1.1 + Math.random() * 4;
+      const s = scaleX * (0.7 + Math.random() * 0.7);
+      sx = s; sy = s;
+    } else if (def.grid) {
+      const cols = Math.ceil(Math.sqrt(partCount));
+      const ix = i % cols;
+      const iz = Math.floor(i / cols);
+      const colsZ = Math.ceil(partCount / cols);
+      // Field-mode grid: smaller patch
+      const patchX = spreadX * 0.4;
+      const patchZ = spreadZ * 0.4;
+      const stepX = patchX / cols;
+      const stepZ = patchZ / colsZ;
+      px = (ix - cols / 2) * stepX + (Math.random() - 0.5) * stepX * 0.4;
+      pz = (iz - colsZ / 2) * stepZ + (Math.random() - 0.5) * stepZ * 0.4;
+      py = baseHeight + (Math.random() - 0.5) * spreadY;
+      const s = scaleX * (0.7 + Math.random() * 0.5);
+      sx = s; sy = s * (def.abbr === 'Cc' ? 0.7 : 0.85);
+    } else if (def.fibrous) {
+      // Cirrus streak — tighter than full single mode
+      px = (Math.random() - 0.5) * spreadX * 0.4;
+      pz = (Math.random() - 0.5) * spreadZ * 0.5;
+      py = baseHeight + (Math.random() - 0.5) * spreadY;
+      const s = scaleX * (0.8 + Math.random() * 0.7);
+      sx = s; sy = scaleY * (0.8 + Math.random() * 0.5);
+    } else if (def.lumpy) {
+      const ang = Math.random() * Math.PI * 2;
+      const rad = Math.pow(Math.random(), 0.65) * spreadX * 0.25;
+      px = Math.cos(ang) * rad;
+      pz = Math.sin(ang) * rad;
+      py = baseHeight + (Math.random() - 0.5) * spreadY;
+      const s = scaleX * (0.7 + Math.random() * 0.6);
+      sx = s; sy = s * (0.7 + Math.random() * 0.4);
+    } else {
+      // Default scatter - tightened for field instances
+      px = (Math.random() - 0.5) * spreadX * 0.5;
+      pz = (Math.random() - 0.5) * spreadZ * 0.5;
+      py = baseHeight + (Math.random() - 0.5) * spreadY;
+      const s = scaleX * (0.8 + Math.random() * 0.5);
+      sx = s; sy = scaleY * (0.8 + Math.random() * 0.5);
+    }
+
+    sprite.position.set(px, py, pz);
+    sprite.scale.set(sx, sy, 1);
+    sprite.userData.baseShade = 0.85 + Math.random() * 0.18;
+    const sunFacing = sprite.position.clone().normalize().dot(sunWorldDir);
+    sprite.userData.litFactor = Math.max(0, Math.min(1,
+      0.45 + sunFacing * 0.35 + (sprite.position.y - baseHeight) / 60 + (Math.random() - 0.5) * 0.25
+    ));
+    sprite.userData.driftX = (Math.random() - 0.5) * 0.2;
+    sprite.userData.driftZ = (Math.random() - 0.5) * 0.2;
+    sprite.userData.bobPhase = Math.random() * Math.PI * 2;
+    sprite.userData.bobAmp = 0.05 + Math.random() * 0.15;
+    sprite.userData.basePos = sprite.position.clone();
+    group.add(sprite);
+  }
+
+  return group;
+}
+
+/* =====================================================
+   5c. SCENE BUILDER (single vs field switch)
+   ===================================================== */
+let sceneMode = 'single'; // 'single' | 'field'
+
+function buildScene(typeKey, densityMultiplier = 1.0) {
+  if (sceneMode === 'field' && isFieldEligible(typeKey)) {
+    return buildCloudField(typeKey, densityMultiplier);
+  }
+  return buildCloud(typeKey, densityMultiplier);
+}
+
+/* =====================================================
    6b. CAMERA CONTROLS (orbit + zoom, manual override)
    ===================================================== */
 const camState = {
@@ -1866,11 +2658,137 @@ let lastFpsUpdate = 0;
 let fpsCount = 0;
 const fpsEl = document.getElementById('fps');
 
+/* ---- Seagull boids update ---- */
+const _v0 = new THREE.Vector3(), _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
+function updateGulls(dt, elapsed) {
+  const gulls = gullsGroup.children;
+  const N = gulls.length;
+  if (N === 0) return;
+  // Boid parameters
+  const COHESION_R = 28;
+  const SEPARATION_R = 10;
+  const ALIGN_R = 22;
+  const COHESION_W = 0.6;
+  const SEPARATION_W = 1.6;
+  const ALIGN_W = 0.5;
+  const MAX_SPEED = 14;
+  const MIN_SPEED = 5;
+  const BOUND_RADIUS = 180;
+  const BOUND_Y_MIN = 22;
+  const BOUND_Y_MAX = 65;
+
+  for (let i = 0; i < N; i++) {
+    const g = gulls[i];
+    const pos = g.position;
+    const vel = g.userData.vel;
+
+    // Reset accumulators
+    const cohesion = _v0.set(0, 0, 0);
+    const separation = _v1.set(0, 0, 0);
+    const alignment = _v2.set(0, 0, 0);
+    let cohesionN = 0, sepN = 0, alignN = 0;
+
+    for (let j = 0; j < N; j++) {
+      if (i === j) continue;
+      const o = gulls[j];
+      const dx = o.position.x - pos.x;
+      const dy = o.position.y - pos.y;
+      const dz = o.position.z - pos.z;
+      const distSq = dx * dx + dy * dy + dz * dz;
+      if (distSq < COHESION_R * COHESION_R) {
+        cohesion.x += o.position.x;
+        cohesion.y += o.position.y;
+        cohesion.z += o.position.z;
+        cohesionN++;
+      }
+      if (distSq < ALIGN_R * ALIGN_R) {
+        alignment.x += o.userData.vel.x;
+        alignment.y += o.userData.vel.y;
+        alignment.z += o.userData.vel.z;
+        alignN++;
+      }
+      if (distSq < SEPARATION_R * SEPARATION_R && distSq > 0.01) {
+        // Push away inversely proportional to distance
+        const inv = 1.0 / Math.sqrt(distSq);
+        separation.x -= dx * inv;
+        separation.y -= dy * inv;
+        separation.z -= dz * inv;
+        sepN++;
+      }
+    }
+
+    // Steer toward cohesion center
+    if (cohesionN > 0) {
+      cohesion.divideScalar(cohesionN).sub(pos).multiplyScalar(0.04 * COHESION_W);
+      vel.add(cohesion);
+    }
+    // Match alignment
+    if (alignN > 0) {
+      alignment.divideScalar(alignN).sub(vel).multiplyScalar(0.05 * ALIGN_W);
+      vel.add(alignment);
+    }
+    // Separation push
+    if (sepN > 0) {
+      separation.multiplyScalar(SEPARATION_W * 0.6);
+      vel.add(separation);
+    }
+
+    // Bounds: gentle pull toward center if outside radius
+    const distXZ = Math.hypot(pos.x, pos.z);
+    if (distXZ > BOUND_RADIUS) {
+      const inward = _v3.set(-pos.x, 0, -pos.z).normalize().multiplyScalar(0.6);
+      vel.add(inward);
+    }
+    // Vertical bounds
+    if (pos.y < BOUND_Y_MIN) vel.y += 0.4;
+    else if (pos.y > BOUND_Y_MAX) vel.y -= 0.4;
+
+    // Clamp speed
+    const speed = vel.length();
+    if (speed > MAX_SPEED) vel.multiplyScalar(MAX_SPEED / speed);
+    else if (speed < MIN_SPEED) vel.multiplyScalar(MIN_SPEED / Math.max(0.01, speed));
+
+    // Apply velocity
+    pos.x += vel.x * dt;
+    pos.y += vel.y * dt;
+    pos.z += vel.z * dt;
+
+    // Wing flap: swap texture every half-flap
+    const flapVal = Math.sin(elapsed * g.userData.flapSpeed + g.userData.flapPhase);
+    const desiredTex = gullsGroup.userData.textures[flapVal > 0 ? 0 : 1];
+    if (g.material.map !== desiredTex) {
+      g.material.map = desiredTex;
+      g.material.needsUpdate = true;
+    }
+
+    // Subtle scale pulse based on flap (gives the impression of wing extension)
+    const s = 2.5 * (1.0 + flapVal * 0.08);
+    g.scale.set(s, s * 0.6, 1);
+  }
+}
+
 function animate() {
   const dt = Math.min(clock.getDelta(), 0.1);
   const elapsed = clock.elapsedTime;
   frame++;
   fpsCount++;
+
+  // Update env time uniform for water waves & shaders
+  envUniforms.uTime.value = elapsed;
+
+  // Palms sway slightly with wind
+  const swayAmount = windSpeed / 120; // 0..1
+  if (palmsGroup) {
+    palmsGroup.children.forEach(palm => {
+      const ud = palm.userData;
+      palm.rotation.z = Math.sin(elapsed * 1.2 + ud.swayPhase) * ud.swayAmp * (0.4 + swayAmount);
+    });
+  }
+
+  // Seagull boids
+  if (gullsGroup) {
+    updateGulls(dt, elapsed);
+  }
 
   // Wind vector in scene (normalize: dir 0 = north = -Z, 90 = east = +X)
   const dirRad = (windDir + 180) * Math.PI / 180; // wind FROM dir → moves TO opposite
@@ -1878,20 +2796,41 @@ function animate() {
   const windVz = -Math.cos(dirRad) * (windSpeed * 0.05);
 
   if (currentCloudGroup) {
-    currentCloudGroup.children.forEach(sprite => {
-      // Drift with wind
-      sprite.position.x += windVx * dt + sprite.userData.driftX * dt * 0.4;
-      sprite.position.z += windVz * dt + sprite.userData.driftZ * dt * 0.4;
-      // Subtle vertical bob
-      sprite.position.y = sprite.userData.basePos.y + Math.sin(elapsed * 0.5 + sprite.userData.bobPhase) * sprite.userData.bobAmp;
+    if (currentCloudGroup.userData.isField) {
+      // Field mode: drift entire sub-cloud groups (so they don't tear apart),
+      // and wrap them across a large area to feel infinite.
+      const FIELD_WRAP = 900;
+      currentCloudGroup.children.forEach(sub => {
+        if (!sub.userData.homePos) return;
+        sub.position.x += windVx * dt * 0.7;
+        sub.position.z += windVz * dt * 0.7;
+        // Wrap each sub-cloud
+        if (sub.position.x > FIELD_WRAP) sub.position.x -= FIELD_WRAP * 2;
+        if (sub.position.x < -FIELD_WRAP) sub.position.x += FIELD_WRAP * 2;
+        if (sub.position.z > FIELD_WRAP) sub.position.z -= FIELD_WRAP * 2;
+        if (sub.position.z < -FIELD_WRAP) sub.position.z += FIELD_WRAP * 2;
+      });
+      // Inside each sub-cloud, just bob the sprites (no per-sprite drift / wrap)
+      currentCloudGroup.traverse(obj => {
+        if (!obj.isSprite || !obj.userData.basePos) return;
+        obj.position.y = obj.userData.basePos.y + Math.sin(elapsed * 0.5 + obj.userData.bobPhase) * obj.userData.bobAmp;
+      });
+    } else {
+      // Single mode: per-sprite drift + wrap as before
+      currentCloudGroup.traverse(obj => {
+        if (!obj.isSprite || !obj.userData.basePos) return;
+        const sprite = obj;
+        sprite.position.x += windVx * dt + sprite.userData.driftX * dt * 0.4;
+        sprite.position.z += windVz * dt + sprite.userData.driftZ * dt * 0.4;
+        sprite.position.y = sprite.userData.basePos.y + Math.sin(elapsed * 0.5 + sprite.userData.bobPhase) * sprite.userData.bobAmp;
 
-      // Wrap if drifted too far
-      const wrap = 250;
-      if (sprite.position.x > wrap) { sprite.position.x -= wrap * 2; sprite.userData.basePos.x -= wrap * 2; }
-      if (sprite.position.x < -wrap) { sprite.position.x += wrap * 2; sprite.userData.basePos.x += wrap * 2; }
-      if (sprite.position.z > wrap) { sprite.position.z -= wrap * 2; sprite.userData.basePos.z -= wrap * 2; }
-      if (sprite.position.z < -wrap) { sprite.position.z += wrap * 2; sprite.userData.basePos.z += wrap * 2; }
-    });
+        const wrap = 250;
+        if (sprite.position.x > wrap) { sprite.position.x -= wrap * 2; sprite.userData.basePos.x -= wrap * 2; }
+        if (sprite.position.x < -wrap) { sprite.position.x += wrap * 2; sprite.userData.basePos.x += wrap * 2; }
+        if (sprite.position.z > wrap) { sprite.position.z -= wrap * 2; sprite.userData.basePos.z -= wrap * 2; }
+        if (sprite.position.z < -wrap) { sprite.position.z += wrap * 2; sprite.userData.basePos.z += wrap * 2; }
+      });
+    }
 
     // Camera: auto-orbit unless user interacted recently
     const now = performance.now();
@@ -1912,10 +2851,16 @@ function animate() {
     }
 
     const az = camState.azimuth;
-    const focusY = etageBaseHeight(currentCloudGroup.userData.def) * 0.4;
+    const def = currentCloudGroup.userData.def;
+    const focusY = etageBaseHeight(def) * 0.4;
+    // Camera height adapts to cloud étage so user always has a good view angle
+    let baseCamY = camState.height;
+    if (def.etage === 'High') baseCamY = camState.height + 22;
+    else if (def.etage === 'Middle') baseCamY = camState.height + 10;
+    else if (def.etage === 'Vertical') baseCamY = camState.height + 4;
     camera.position.x = Math.sin(az) * camState.radius;
     camera.position.z = Math.cos(az) * camState.radius;
-    camera.position.y = camState.height + Math.sin(elapsed * 0.2) * 1.5;
+    camera.position.y = Math.max(-18, baseCamY + Math.sin(elapsed * 0.2) * 1.5);
     camera.lookAt(0, focusY, 0);
 
     // Update compass — show camera bearing relative to north (-Z)
@@ -1967,7 +2912,7 @@ function updateInfoCard(typeKey) {
       <span class="abbr">${def.abbr}</span>
       <span class="etage">${def.etage} Étage</span>
     </div>
-    <div class="cloud-name">${def.name}</div>
+    <div class="cloud-name">${def.name}${sceneMode === 'field' && isFieldEligible(typeKey) ? ` <span style="color: var(--accent); font-style: normal; font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; margin-left: 6px;">· FIELD MODE</span>` : ''}</div>
     <div class="cloud-desc">${def.desc}</div>
 
     <div class="stat-grid">
@@ -2023,17 +2968,97 @@ function estimateTemp(ft) {
 
 function setCloud(key) {
   cloudSelect.value = key;
-  buildCloud(key, densityMult);
+  buildScene(key, densityMult);
   updateInfoCard(key);
+  // Adjust camera default radius for field mode (wider view of the larger field)
+  if (sceneMode === 'field' && isFieldEligible(key)) {
+    if (!camState.manual) camState.radius = 480;
+  } else {
+    if (!camState.manual) camState.radius = 220;
+  }
 }
 
 cloudSelect.addEventListener('change', e => setCloud(e.target.value));
+
+/* Mode toggle (single / field) — desktop + mobile in sync */
+const modeToggleEls = [
+  document.getElementById('mode-toggle'),
+  document.getElementById('m-mode-toggle')
+].filter(Boolean);
+
+function setMode(newMode) {
+  // If switching to field but current cloud isn't eligible, fall back to single
+  if (newMode === 'field' && !isFieldEligible(cloudSelect.value)) {
+    newMode = 'single';
+  }
+  sceneMode = newMode;
+  modeToggleEls.forEach(group => {
+    group.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === sceneMode);
+    });
+  });
+  // Rebuild scene with new mode
+  buildScene(cloudSelect.value, densityMult);
+  updateInfoCard(cloudSelect.value);
+  if (typeof syncMobileInfo === 'function') syncMobileInfo();
+  // Reset camera radius
+  camState.manual = false;
+  camState.radius = (sceneMode === 'field' && isFieldEligible(cloudSelect.value)) ? 480 : 220;
+}
+
+function refreshModeToggleEnablement() {
+  const eligible = isFieldEligible(cloudSelect.value);
+  modeToggleEls.forEach(group => {
+    const fieldBtn = group.querySelector('button[data-mode="field"]');
+    if (fieldBtn) {
+      fieldBtn.disabled = !eligible;
+      fieldBtn.title = eligible ? 'Multiple cloud instances scattered across the scene' : 'Field mode is only available for discrete cloud types (Cu, Sc, Ac, Cc, Ci)';
+    }
+  });
+  // If user was in field but cloud changed to ineligible, snap back
+  if (sceneMode === 'field' && !eligible) {
+    sceneMode = 'single';
+    modeToggleEls.forEach(group => {
+      group.querySelectorAll('button').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === 'single');
+      });
+    });
+  }
+}
+
+modeToggleEls.forEach(group => {
+  group.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn || btn.disabled) return;
+    setMode(btn.dataset.mode);
+  });
+});
+
+// Refresh toggle eligibility whenever cloud changes
+cloudSelect.addEventListener('change', refreshModeToggleEnablement);
 
 document.getElementById('btn-randomize').addEventListener('click', () => {
   let next;
   do {
     next = CLOUD_KEYS[Math.floor(Math.random() * CLOUD_KEYS.length)];
   } while (next === cloudSelect.value && CLOUD_KEYS.length > 1);
+
+  // Randomize atmospheric parameters too (but NOT time of day — user controls that)
+  const newWindSpeed = Math.round(Math.random() * 80); // 0-80 kt
+  const newWindDir = Math.floor(Math.random() * 360);
+  const newDensity = 50 + Math.round(Math.random() * 80 / 5) * 5; // 50-130%, snapped to 5
+
+  // Update sliders + dispatch input events so all wiring (mobile mirrors, slider fills, scene rebuild) fires
+  windSlider.value = newWindSpeed;
+  windSlider.dispatchEvent(new Event('input', { bubbles: true }));
+
+  dirSlider.value = newWindDir;
+  dirSlider.dispatchEvent(new Event('input', { bubbles: true }));
+
+  denSlider.value = newDensity;
+  denSlider.dispatchEvent(new Event('input', { bubbles: true }));
+
+  // Cloud last so its rebuild uses the new density
   setCloud(next);
 });
 
@@ -2077,7 +3102,7 @@ denSlider.addEventListener('input', e => {
   densityMult = +e.target.value / 100;
   denVal.textContent = `${e.target.value}%`;
   e.target.style.setProperty('--val', `${((+e.target.value - 20) / 130) * 100}%`);
-  buildCloud(cloudSelect.value, densityMult);
+  buildScene(cloudSelect.value, densityMult);
 });
 denSlider.style.setProperty('--val', `${((100-20)/130)*100}%`);
 
@@ -2356,11 +3381,11 @@ function startQuiz() {
 }
 
 function getHighScore() {
-  try { return parseInt(localStorage.getItem('cloudgen_hi') || '0', 10) || 0; }
+  try { return parseInt(localStorage.getItem('cloude_hi') || localStorage.getItem('cloudgen_hi') || '0', 10) || 0; }
   catch(_) { return 0; }
 }
 function setHighScore(s) {
-  try { localStorage.setItem('cloudgen_hi', String(s)); } catch(_) {}
+  try { localStorage.setItem('cloude_hi', String(s)); } catch(_) {}
 }
 
 function endQuiz() {
@@ -2748,6 +3773,7 @@ document.getElementById('btn-randomize').addEventListener('click', () => setTime
    ===================================================== */
 setTimeOfDay(14); // 14:00 — clear afternoon sky
 setCloud('Cu'); // start with friendly Cumulus
+refreshModeToggleEnablement();
 syncMobileInfo();
 animate();
 
