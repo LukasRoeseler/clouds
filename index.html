@@ -13,25 +13,29 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='b' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%2305080d'/><stop offset='1' stop-color='%2318263a'/></linearGradient><radialGradient id='s' cx='0.5' cy='0.5' r='0.5'><stop offset='0' stop-color='%23fff0c8'/><stop offset='1' stop-color='%23fff0c8' stop-opacity='0'/></radialGradient></defs><rect width='64' height='64' rx='12' fill='url(%23b)'/><circle cx='46' cy='20' r='12' fill='url(%23s)'/><circle cx='46' cy='20' r='5' fill='%23fff0c8'/><path d='M14 44 q0 -10 10 -10 q2 -8 11 -8 q9 0 11 8 q9 0 9 9 q0 6 -7 6 H21 q-7 0 -7 -5 z' fill='%2300d2ff' opacity='0.92'/><path d='M14 44 q0 -10 10 -10 q2 -8 11 -8 q9 0 11 8 q9 0 9 9 q0 6 -7 6 H21 q-7 0 -7 -5 z' fill='none' stroke='%2300ffae' stroke-width='1' opacity='0.5'/></svg>" />
 <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%2305080d'/><circle cx='46' cy='20' r='5' fill='%23fff0c8'/><path d='M14 44 q0 -10 10 -10 q2 -8 11 -8 q9 0 11 8 q9 0 9 9 q0 6 -7 6 H21 q-7 0 -7 -5 z' fill='%2300d2ff'/></svg>" />
 <style>
-  /* ---------- AVIATION DASHBOARD THEME ---------- */
+  /* ---------- AVIATION INSTRUMENT THEME (early-2000s G1000 style) ---------- */
   :root {
-    --bg-0: #05080d;
-    --bg-1: #0a1119;
-    --bg-2: #111b27;
-    --bg-3: #18263a;
-    --line: #1f3550;
-    --line-2: #2a4870;
-    --txt: #d8e4f0;
-    --txt-dim: #7e94ad;
-    --txt-mute: #4f6885;
-    --accent: #00d2ff;
-    --accent-2: #00ffae;
+    --bg-0: #050a0a;        /* deep almost-black */
+    --bg-1: #0a1212;        /* panel bg */
+    --bg-2: #0d1818;        /* recessed slot */
+    --bg-3: #142020;        /* hover */
+    --line: #1f3030;        /* subtle border */
+    --line-2: #2c4444;      /* prominent border */
+    --txt: #d8e8d8;         /* main text — slightly green tinged like CRT */
+    --txt-dim: #7e9a90;     /* secondary */
+    --txt-mute: #4a6660;
+    --accent: #00d2ff;      /* cyan — highlights */
+    --accent-2: #00ffae;    /* mint — confirmations */
+    --amber: #ffaa00;       /* amber — data values, classic instrument color */
+    --amber-bright: #ffcc44;
     --warn: #ffb347;
-    --danger: #ff5c5c;
-    --ok: #4ade80;
-    --shadow: 0 8px 28px rgba(0,0,0,0.55);
-    --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
-    --sans: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    --danger: #ff4040;
+    --ok: #44dd66;
+    --shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 4px 14px rgba(0, 0, 0, 0.7);
+    --inset-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), inset 0 -1px 0 rgba(0, 0, 0, 0.6);
+    --mono: 'JetBrains Mono', 'SF Mono', Consolas, ui-monospace, monospace;
+    --sans: 'Bahnschrift', 'Eurostile', 'DIN Condensed', 'Helvetica Neue', system-ui, sans-serif;
+    --display: 'Bahnschrift', 'Eurostile', 'DIN Condensed', 'Impact', sans-serif;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -71,20 +75,21 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 18px;
-    background: linear-gradient(180deg, rgba(5,8,13,0.92), rgba(5,8,13,0.55) 70%, transparent);
+    background: linear-gradient(180deg, rgba(5,10,10,0.96), rgba(5,10,10,0.7) 70%, transparent);
     backdrop-filter: blur(6px);
-    border-bottom: 1px solid rgba(31, 53, 80, 0.6);
+    border-bottom: 1px solid rgba(44, 68, 68, 0.6);
     z-index: 20;
     pointer-events: none;
   }
   .hud-top .brand {
     display: flex; align-items: center; gap: 10px;
-    font-family: var(--mono);
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    font-size: 13px;
+    font-family: var(--display);
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    font-size: 15px;
     color: var(--accent);
     text-transform: uppercase;
+    text-shadow: 0 0 8px rgba(0, 210, 255, 0.5);
   }
   .hud-top .brand .dot {
     width: 8px; height: 8px; border-radius: 50%;
@@ -98,11 +103,19 @@
     display: flex; gap: 22px;
     font-family: var(--mono);
     font-size: 11px;
-    color: var(--txt-dim);
+    color: var(--txt-mute);
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.14em;
   }
-  .hud-top .meta b { color: var(--txt); font-weight: 500; }
+  .hud-top .meta b {
+    color: var(--amber);
+    font-weight: 600;
+    text-shadow: 0 0 5px rgba(255, 170, 0, 0.4);
+    font-family: var(--display);
+    font-size: 13px;
+    letter-spacing: 0.05em;
+    margin-left: 2px;
+  }
 
   /* Side panel: controls */
   .panel {
@@ -112,13 +125,23 @@
     width: 320px;
     max-height: calc(100vh - 86px);
     overflow-y: auto;
-    background: linear-gradient(180deg, rgba(10,17,25,0.92), rgba(10,17,25,0.78));
-    border: 1px solid var(--line);
-    border-radius: 10px;
+    background: linear-gradient(180deg, #0c1818 0%, #050c0c 100%);
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
     padding: 16px 16px 18px 16px;
-    box-shadow: var(--shadow);
+    box-shadow: var(--shadow), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
     z-index: 15;
     backdrop-filter: blur(8px);
+    /* Subtle screen scanlines */
+    background-image:
+      repeating-linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.008) 0px,
+        rgba(255, 255, 255, 0.008) 1px,
+        transparent 1px,
+        transparent 3px
+      ),
+      linear-gradient(180deg, #0c1818 0%, #050c0c 100%);
   }
   .panel::-webkit-scrollbar { width: 6px; }
   .panel::-webkit-scrollbar-track { background: transparent; }
@@ -158,19 +181,21 @@
   select {
     width: 100%;
     appearance: none;
-    background: var(--bg-2);
-    color: var(--txt);
+    background: linear-gradient(180deg, #050a0a 0%, #0a1212 100%);
+    color: var(--amber);
     border: 1px solid var(--line-2);
-    border-radius: 6px;
-    padding: 9px 32px 9px 12px;
-    font-family: var(--mono);
-    font-size: 12px;
-    letter-spacing: 0.05em;
+    border-radius: 3px;
+    padding: 10px 32px 10px 14px;
+    font-family: var(--display);
+    font-size: 13px;
+    letter-spacing: 0.08em;
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+    text-shadow: 0 0 5px rgba(255, 170, 0, 0.3);
   }
-  select:hover { border-color: var(--accent); background: var(--bg-3); }
-  select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0, 210, 255, 0.18); }
+  select:hover { border-color: var(--accent); }
+  select:focus { outline: none; border-color: var(--accent); box-shadow: inset 0 1px 3px rgba(0,0,0,0.5), 0 0 0 2px rgba(0, 210, 255, 0.18); }
   .select-wrap::after {
     content: '▾';
     position: absolute;
@@ -185,29 +210,51 @@
   .btn-row { display: flex; gap: 8px; }
   button {
     flex: 1;
-    background: var(--bg-2);
+    background: linear-gradient(180deg, #1a2828 0%, #0d1818 100%);
     color: var(--txt);
     border: 1px solid var(--line-2);
-    border-radius: 6px;
+    border-radius: 3px;
     padding: 10px 12px;
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.1em;
+    font-family: var(--display);
+    font-size: 12px;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.1s;
+    box-shadow: var(--inset-shadow);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.6);
   }
-  button:hover { border-color: var(--accent); color: var(--accent); background: var(--bg-3); }
-  button:active { transform: translateY(1px); }
+  button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: linear-gradient(180deg, #1a3838 0%, #0d2828 100%);
+  }
+  button:active {
+    transform: translateY(1px);
+    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.6);
+  }
   button.primary {
-    background: linear-gradient(180deg, #006d8a, #004f66);
+    background: linear-gradient(180deg, #006688 0%, #003a55 100%);
     border-color: var(--accent);
     color: #eaf9ff;
+    text-shadow: 0 0 6px rgba(0, 210, 255, 0.5);
   }
-  button.primary:hover { background: linear-gradient(180deg, #0091ba, #006d8a); color: #fff; }
+  button.primary:hover {
+    background: linear-gradient(180deg, #008cb4 0%, #005a7a 100%);
+    color: #fff;
+  }
   button.danger { border-color: var(--danger); color: var(--danger); }
-  button.danger:hover { background: rgba(255, 92, 92, 0.12); }
-  button.success { border-color: var(--ok); color: var(--ok); }
+  button.danger:hover { background: rgba(255, 64, 64, 0.12); }
+  button.success {
+    background: linear-gradient(180deg, #006633 0%, #003322 100%);
+    border-color: var(--ok);
+    color: #ddffdd;
+    text-shadow: 0 0 5px rgba(68, 221, 102, 0.4);
+  }
+  button.success:hover {
+    background: linear-gradient(180deg, #008844 0%, #005533 100%);
+  }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* Segmented toggle (single / field) */
@@ -282,10 +329,12 @@
     border-radius: 50%;
   }
   .slider-val {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--accent);
+    font-family: var(--display);
+    font-size: 13px;
+    color: var(--amber);
     float: right;
+    text-shadow: 0 0 5px rgba(255, 170, 0, 0.3);
+    letter-spacing: 0.05em;
   }
 
   /* Info card */
@@ -294,15 +343,24 @@
     top: 70px;
     right: 14px;
     width: 320px;
-    background: linear-gradient(180deg, rgba(10,17,25,0.92), rgba(10,17,25,0.78));
-    border: 1px solid var(--line);
-    border-radius: 10px;
+    background: linear-gradient(180deg, #0c1818 0%, #050c0c 100%);
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
     padding: 16px;
     box-shadow: var(--shadow);
     z-index: 15;
     backdrop-filter: blur(8px);
     max-height: calc(100vh - 86px);
     overflow-y: auto;
+    background-image:
+      repeating-linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.008) 0px,
+        rgba(255, 255, 255, 0.008) 1px,
+        transparent 1px,
+        transparent 3px
+      ),
+      linear-gradient(180deg, #0c1818 0%, #050c0c 100%);
   }
   .info-card::-webkit-scrollbar { width: 6px; }
   .info-card::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
@@ -312,21 +370,23 @@
     margin-bottom: 4px;
   }
   .cloud-title .abbr {
-    font-family: var(--mono);
-    font-size: 28px;
+    font-family: var(--display);
+    font-size: 32px;
     font-weight: 700;
-    color: var(--accent);
-    letter-spacing: 0.05em;
+    color: var(--amber);
+    letter-spacing: 0.08em;
+    text-shadow: 0 0 10px rgba(255, 170, 0, 0.5);
   }
   .cloud-title .etage {
     font-family: var(--mono);
     font-size: 10px;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.18em;
     color: var(--txt-mute);
     text-transform: uppercase;
     padding: 3px 8px;
     border: 1px solid var(--line-2);
-    border-radius: 4px;
+    border-radius: 2px;
+    background: var(--bg-2);
   }
   .cloud-name {
     font-size: 13px;
@@ -349,29 +409,32 @@
     margin-bottom: 14px;
   }
   .stat {
-    background: var(--bg-2);
+    background: linear-gradient(180deg, #050a0a 0%, #0a1212 100%);
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: 3px;
     padding: 8px 10px;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
   }
   .stat .lbl {
     font-family: var(--mono);
     font-size: 9px;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.16em;
     color: var(--txt-mute);
     text-transform: uppercase;
     margin-bottom: 3px;
   }
   .stat .val {
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--txt);
+    font-family: var(--display);
+    font-size: 14px;
+    color: var(--amber);
     font-weight: 600;
+    letter-spacing: 0.06em;
+    text-shadow: 0 0 6px rgba(255, 170, 0, 0.4);
   }
-  .stat .val.accent { color: var(--accent); }
-  .stat .val.warn { color: var(--warn); }
-  .stat .val.danger { color: var(--danger); }
-  .stat .val.ok { color: var(--ok); }
+  .stat .val.accent { color: var(--accent); text-shadow: 0 0 6px rgba(0, 210, 255, 0.4); }
+  .stat .val.warn { color: var(--warn); text-shadow: 0 0 6px rgba(255, 179, 71, 0.4); }
+  .stat .val.danger { color: var(--danger); text-shadow: 0 0 6px rgba(255, 64, 64, 0.4); }
+  .stat .val.ok { color: var(--ok); text-shadow: 0 0 6px rgba(68, 221, 102, 0.4); }
 
   .hazard-row {
     display: flex; gap: 6px; flex-wrap: wrap;
@@ -1483,92 +1546,315 @@ const envUniforms = {
 */
 function landHeight(x, z) {
   if (x < 0) return -2.0; // ocean floor
-  // Beach band: 0..40 units inland, mostly flat, slight rise
+  // Beach band: 0..40 units inland, mostly flat
   const beachT = Math.min(1, x / 40);
   const beach = beachT * 1.2;
-  // City band: 40..400 inland, mostly flat with very gentle bumps
-  const cityT = Math.min(1, Math.max(0, (x - 40) / 360));
-  const city = cityT * 3.0 + (fbm2D(x * 0.008, z * 0.008, 3) - 0.5) * 2.0;
-  // Foothills band: 400..900
-  const hillT = Math.min(1, Math.max(0, (x - 400) / 500));
-  const hills = hillT * hillT * 28 + (fbm2D(x * 0.005, z * 0.005, 4) - 0.5) * 14 * hillT;
-  // Mountain band: 900+
-  const mtT = Math.max(0, (x - 900) / 600);
-  const mountains = mtT * 65 + (fbm2D(x * 0.004, z * 0.003, 5) - 0.5) * 35 * Math.min(1, mtT);
-  return beach + city + hills + mountains;
+  // City band: 40..800 — gentle rise, slight noise bumps
+  const cityT = Math.min(1, Math.max(0, (x - 40) / 760));
+  const city = cityT * 5.0 + (fbm2D(x * 0.008, z * 0.008, 3) - 0.5) * 2.5;
+  // Forest belt: 800..1100, slight uphill
+  const forestT = Math.min(1, Math.max(0, (x - 800) / 300));
+  const forest = forestT * 8.0 + (fbm2D(x * 0.01, z * 0.01, 3) - 0.5) * 3;
+  // Foothills band: 1100..1700
+  const hillT = Math.min(1, Math.max(0, (x - 1100) / 600));
+  const hills = hillT * hillT * 35 + (fbm2D(x * 0.005, z * 0.005, 4) - 0.5) * 18 * hillT;
+  // Mountain band: 1700+
+  const mtT = Math.max(0, (x - 1700) / 800);
+  const mountains = mtT * 80 + (fbm2D(x * 0.004, z * 0.003, 5) - 0.5) * 40 * Math.min(1, mtT);
+  return beach + city + hills + forest + mountains;
 }
 
 /* ---- Terrain (single tessellated plane covering land + foothills + mountains) ---- */
 function makeTerrain() {
-  const SIZE_X = 4000; // along inland direction
-  const SIZE_Z = 4000;
-  const SEG_X = 200;
-  const SEG_Z = 160;
+  const SIZE_X = 5500;
+  const SIZE_Z = 5500;
+  const SEG_X = 220;
+  const SEG_Z = 180;
   const geo = new THREE.PlaneGeometry(SIZE_X, SIZE_Z, SEG_X, SEG_Z);
   geo.rotateX(-Math.PI / 2);
   // Center plane so positive X extends inland: shift +X by half size
-  geo.translate(SIZE_X / 2 - 80, 0, 0); // -80 puts a little bit of ocean floor behind beach line
+  geo.translate(SIZE_X / 2 - 80, 0, 0);
 
   const pos = geo.attributes.position;
-  const colors = new Float32Array(pos.count * 3);
-
-  // Color palette (lowpoly painterly, BMX-like)
-  const C_OCEAN  = [0.10, 0.22, 0.32];   // dark teal floor (rarely visible — water hides it)
-  const C_BEACH  = [0.85, 0.78, 0.60];   // warm sand
-  const C_CITY   = [0.36, 0.34, 0.32];   // grey-brown urban ground
-  const C_PARK   = [0.34, 0.46, 0.30];   // green spaces
-  const C_HILL   = [0.45, 0.42, 0.30];   // dry foothills (chaparral)
-  const C_HILL_GREEN = [0.38, 0.48, 0.32];
-  const C_MTN    = [0.42, 0.38, 0.34];   // rocky brown
-  const C_SNOW   = [0.92, 0.94, 1.00];
-
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
-    const h = landHeight(x, z);
-    pos.setY(i, h);
-
-    // Vertex colors based on band + jitter
-    let col;
-    if (x < 0) col = C_OCEAN;
-    else if (x < 38) col = C_BEACH;
-    else if (x < 380) {
-      // City: mostly grey, occasional park patches based on noise
-      const park = fbm2D(x * 0.02, z * 0.02, 3);
-      col = park > 0.62 ? C_PARK : C_CITY;
-    }
-    else if (x < 880) {
-      // Foothills: dry chaparral with green patches
-      const greenness = fbm2D(x * 0.006, z * 0.006, 3);
-      col = greenness > 0.55 ? C_HILL_GREEN : C_HILL;
-    }
-    else {
-      // Mountains: rocky, snow on top
-      col = h > 80 ? C_SNOW : C_MTN;
-    }
-    // Slight per-vertex noise jitter for painterly variation
-    const jitter = (fbm2D(x * 0.05, z * 0.05, 2) - 0.5) * 0.08;
-    colors[i * 3]     = Math.max(0, Math.min(1, col[0] + jitter));
-    colors[i * 3 + 1] = Math.max(0, Math.min(1, col[1] + jitter));
-    colors[i * 3 + 2] = Math.max(0, Math.min(1, col[2] + jitter));
+    pos.setY(i, landHeight(x, z));
   }
   pos.needsUpdate = true;
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  // UV coords: map terrain XZ → UV [0..1]^2 so the painted texture aligns with land bands
+  const uvs = geo.attributes.uv;
+  for (let i = 0; i < uvs.count; i++) {
+    const x = pos.getX(i);
+    const z = pos.getZ(i);
+    // Map x: -80..(SIZE_X-80) → 0..1
+    const u = (x + 80) / SIZE_X;
+    // Map z: -SIZE_Z/2..SIZE_Z/2 → 0..1
+    const v = (z + SIZE_Z / 2) / SIZE_Z;
+    uvs.setXY(i, u, v);
+  }
+  uvs.needsUpdate = true;
+
   geo.computeVertexNormals();
 
-  // Flat shading for that lowpoly look
+  // Bake a high-resolution detail texture
+  const tex = bakeTerrainTexture(SIZE_X, SIZE_Z);
+
   const mat = new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    flatShading: true,
+    map: tex,
     roughness: 0.95,
     metalness: 0.0,
-    fog: true
+    fog: true,
+    flatShading: false  // smooth shading reads the painted texture better
   });
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.y = ENV_GROUND_Y;
   return mesh;
 }
+
+/* ---- Bake terrain detail texture on canvas ----
+   The texture is mapped 1:1 to the terrain plane so x_world = u*SIZE_X - 80
+   This lets us draw streets, grass patches, sand band etc. exactly aligned
+   with the height bands and city placement.                                  */
+function bakeTerrainTexture(SIZE_X, SIZE_Z) {
+  const RES = 2048;
+  const c = document.createElement('canvas');
+  c.width = c.height = RES;
+  const ctx = c.getContext('2d');
+
+  // Helper: world x,z → canvas px
+  const wx2px = wx => (wx + 80) / SIZE_X * RES;
+  const wz2py = wz => (wz + SIZE_Z / 2) / SIZE_Z * RES;
+  const wScale = RES / SIZE_X;
+
+  // ---- Background bands (rough fills) ----
+  // Ocean (x < 0): muted teal — though water mesh covers it, just for safety
+  ctx.fillStyle = '#142838';
+  ctx.fillRect(0, 0, wx2px(0), RES);
+
+  // Beach (0..40): warm sand
+  ctx.fillStyle = '#e3cf95';
+  ctx.fillRect(wx2px(0), 0, wx2px(40) - wx2px(0), RES);
+
+  // City ground (40..800): asphalt grey
+  ctx.fillStyle = '#7a7468';
+  ctx.fillRect(wx2px(40), 0, wx2px(800) - wx2px(40), RES);
+
+  // Forest belt (800..1100): dark green
+  ctx.fillStyle = '#3a5630';
+  ctx.fillRect(wx2px(800), 0, wx2px(1100) - wx2px(800), RES);
+
+  // Foothills (1100..1700): chaparral
+  ctx.fillStyle = '#8a7a4c';
+  ctx.fillRect(wx2px(1100), 0, wx2px(1700) - wx2px(1100), RES);
+
+  // Mountains (1700+): rocky brown
+  ctx.fillStyle = '#6e5a4c';
+  ctx.fillRect(wx2px(1700), 0, RES, RES);
+
+  // ---- Procedural noise overlay (paint patches with vary in each band) ----
+  // We sample fbm at coarse + fine scale and color-jitter
+  const imgData = ctx.getImageData(0, 0, RES, RES);
+  const data = imgData.data;
+  for (let py = 0; py < RES; py++) {
+    for (let px = 0; px < RES; px++) {
+      const wx = (px / RES) * SIZE_X - 80;
+      const wz = (py / RES) * SIZE_Z - SIZE_Z / 2;
+      const i = (py * RES + px) * 4;
+
+      let r = data[i], g = data[i + 1], b = data[i + 2];
+
+      // Beach: small noise → wet vs dry sand
+      if (wx >= 0 && wx < 40) {
+        const wet = fbm2D(wx * 0.08, wz * 0.08, 3);
+        const blend = wet * 60;
+        r += blend - 30; g += blend - 30; b += (blend - 30) * 0.7;
+        // Wet edge near water
+        if (wx < 8) {
+          const t = wx / 8;
+          r = r * t + 0x60 * (1 - t);
+          g = g * t + 0x70 * (1 - t);
+          b = b * t + 0x70 * (1 - t);
+        }
+      }
+
+      // City: mix grass parks + asphalt + occasional building shadows
+      if (wx >= 40 && wx < 800) {
+        const park = fbm2D(wx * 0.012, wz * 0.012, 3);
+        if (park > 0.62) {
+          // Park / grass patch
+          r = 0x55 + (park - 0.62) * 100;
+          g = 0x70 + (park - 0.62) * 80;
+          b = 0x42;
+        } else {
+          // Asphalt with subtle variation
+          const variation = fbm2D(wx * 0.05, wz * 0.05, 3);
+          const v = (variation - 0.5) * 30;
+          r = 0x6c + v; g = 0x68 + v; b = 0x60 + v;
+        }
+      }
+
+      // Forest belt: tree-canopy noise (dark/light green)
+      if (wx >= 800 && wx < 1100) {
+        const canopy = fbm2D(wx * 0.06, wz * 0.06, 4);
+        const lit = fbm2D(wx * 0.2, wz * 0.2, 3) * 30 - 15;
+        r = 0x36 + canopy * 30 + lit;
+        g = 0x58 + canopy * 50 + lit;
+        b = 0x2c + canopy * 18 + lit;
+      }
+
+      // Foothills: chaparral with green/brown patches
+      if (wx >= 1100 && wx < 1700) {
+        const greenness = fbm2D(wx * 0.008, wz * 0.008, 4);
+        const detail = fbm2D(wx * 0.05, wz * 0.05, 3) * 20 - 10;
+        if (greenness > 0.5) {
+          r = 0x68 + detail; g = 0x78 + detail; b = 0x48 + detail;
+        } else {
+          r = 0x9a + detail; g = 0x82 + detail; b = 0x4a + detail;
+        }
+      }
+
+      // Mountains: rock variation, with snow at high elevation (height-aware)
+      if (wx >= 1700) {
+        const elev = landHeight(wx, wz);
+        const detail = fbm2D(wx * 0.03, wz * 0.03, 3) * 25 - 12;
+        if (elev > 80) {
+          // Snow
+          const snowVar = fbm2D(wx * 0.1, wz * 0.1, 2) * 20;
+          r = 0xe8 + snowVar; g = 0xee + snowVar; b = 0xff;
+        } else if (elev > 50) {
+          // Mixed rock with snow streaks
+          const m = fbm2D(wx * 0.05, wz * 0.05, 3);
+          if (m > 0.55) {
+            r = 0xc8; g = 0xd0; b = 0xe0;
+          } else {
+            r = 0x70 + detail; g = 0x66 + detail; b = 0x58 + detail;
+          }
+        } else {
+          r = 0x78 + detail; g = 0x66 + detail; b = 0x52 + detail;
+        }
+      }
+
+      data[i]     = Math.max(0, Math.min(255, r));
+      data[i + 1] = Math.max(0, Math.min(255, g));
+      data[i + 2] = Math.max(0, Math.min(255, b));
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  // ---- Draw street grid in city band ----
+  // City spans x: 45..780, z: -1500..1500 (matches city placement)
+  // Street widths: ~3m (small), ~6m (boulevards every 5 blocks)
+  const BLOCK = 22; // street spacing in world units
+  ctx.strokeStyle = '#3c3a36';
+  ctx.lineWidth = 2 * wScale;
+  ctx.beginPath();
+  for (let bx = 45; bx < 800; bx += BLOCK) {
+    const isBoulevard = ((bx - 45) / BLOCK) % 5 === 0;
+    ctx.lineWidth = (isBoulevard ? 4.5 : 2.0) * wScale;
+    if (isBoulevard) { ctx.stroke(); ctx.beginPath(); }
+    ctx.moveTo(wx2px(bx), wz2py(-1500));
+    ctx.lineTo(wx2px(bx), wz2py(1500));
+    if (isBoulevard) { ctx.stroke(); ctx.beginPath(); }
+  }
+  for (let bz = -1500; bz < 1500; bz += BLOCK) {
+    const isBoulevard = ((bz + 1500) / BLOCK) % 5 === 0;
+    ctx.lineWidth = (isBoulevard ? 4.5 : 2.0) * wScale;
+    if (isBoulevard) { ctx.stroke(); ctx.beginPath(); }
+    ctx.moveTo(wx2px(45), wz2py(bz));
+    ctx.lineTo(wx2px(800), wz2py(bz));
+    if (isBoulevard) { ctx.stroke(); ctx.beginPath(); }
+  }
+  ctx.stroke();
+
+  // Coastal road (highway running parallel to beach)
+  ctx.strokeStyle = '#444240';
+  ctx.lineWidth = 5 * wScale;
+  ctx.beginPath();
+  ctx.moveTo(wx2px(42), wz2py(-1500));
+  ctx.lineTo(wx2px(42), wz2py(1500));
+  ctx.stroke();
+  // Lane markings
+  ctx.strokeStyle = '#d4c060';
+  ctx.lineWidth = 0.6 * wScale;
+  ctx.setLineDash([8 * wScale, 12 * wScale]);
+  ctx.beginPath();
+  ctx.moveTo(wx2px(42), wz2py(-1500));
+  ctx.lineTo(wx2px(42), wz2py(1500));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // A couple of mountain roads (zigzag)
+  ctx.strokeStyle = '#5a5246';
+  ctx.lineWidth = 2.5 * wScale;
+  for (let z0 = -800; z0 < 1000; z0 += 600) {
+    ctx.beginPath();
+    let x = 800, z = z0;
+    ctx.moveTo(wx2px(x), wz2py(z));
+    while (x < 1700) {
+      x += 80;
+      z += (Math.random() - 0.5) * 90;
+      ctx.lineTo(wx2px(x), wz2py(z));
+    }
+    ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/* ---- Forest: instanced trees in a belt behind the city ---- */
+function makeForest() {
+  const group = new THREE.Group();
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3220, roughness: 0.95, flatShading: true, fog: true });
+  const leafMat1 = new THREE.MeshStandardMaterial({ color: 0x3a5630, roughness: 0.9, flatShading: true, fog: true });
+  const leafMat2 = new THREE.MeshStandardMaterial({ color: 0x466a3a, roughness: 0.9, flatShading: true, fog: true });
+
+  // Tree templates (simple cone + trunk)
+  const trunkGeo = new THREE.CylinderGeometry(0.4, 0.5, 4, 5);
+  const leafGeoA = new THREE.ConeGeometry(2.5, 6, 6);
+  const leafGeoB = new THREE.ConeGeometry(2.0, 4.5, 6);
+
+  // Forest belt: x = 800..1100, z = -1400..1400
+  const TREE_COUNT = 600;
+  let rng = 0xa37b;
+  const r = () => { rng = (rng * 1664525 + 1013904223) & 0xffffffff; return ((rng >>> 0) / 4294967295); };
+
+  for (let i = 0; i < TREE_COUNT; i++) {
+    const px = 800 + r() * 300;
+    const pz = -1400 + r() * 2800;
+    const terrainY = landHeight(px, pz);
+
+    // Stagger: density falls off near edges
+    const xT = (px - 800) / 300;
+    if (r() > Math.sin(xT * Math.PI) * 0.95 + 0.1) continue;
+
+    const tree = new THREE.Group();
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.y = 2;
+    tree.add(trunk);
+
+    const which = r() < 0.6;
+    const leaves = new THREE.Mesh(which ? leafGeoA : leafGeoB, r() < 0.5 ? leafMat1 : leafMat2);
+    leaves.position.y = which ? 6 : 5;
+    tree.add(leaves);
+
+    tree.position.set(px, ENV_GROUND_Y + terrainY, pz);
+    tree.scale.setScalar(0.7 + r() * 0.6);
+    tree.rotation.y = r() * Math.PI * 2;
+    group.add(tree);
+  }
+
+  return group;
+}
+
 
 /* ---- Ocean ---- */
 function makeOcean() {
@@ -1599,18 +1885,18 @@ function makeOcean() {
       }
       void main() {
         vec3 p = position;
-        float t = uTime;
+        float t = uTime * 0.4;  // slower wave motion
         float h = 0.0;
-        h += wave(p.xz, normalize(vec2(1.0, 0.6)), 36.0, 1.2, 0.45, t);
-        h += wave(p.xz, normalize(vec2(-0.5, 1.0)), 22.0, 1.5, 0.25, t);
-        h += wave(p.xz, normalize(vec2(0.7, -0.3)), 12.0, 1.9, 0.14, t);
+        h += wave(p.xz, normalize(vec2(1.0, 0.6)), 60.0, 0.6, 0.55, t);
+        h += wave(p.xz, normalize(vec2(-0.5, 1.0)), 38.0, 0.8, 0.30, t);
+        h += wave(p.xz, normalize(vec2(0.7, -0.3)), 22.0, 1.0, 0.16, t);
         p.y += h;
 
         float eps = 0.5;
-        float hx = wave(vec2(p.x + eps, p.z), normalize(vec2(1.0, 0.6)), 36.0, 1.2, 0.45, t)
-                 + wave(vec2(p.x + eps, p.z), normalize(vec2(-0.5, 1.0)), 22.0, 1.5, 0.25, t);
-        float hz = wave(vec2(p.x, p.z + eps), normalize(vec2(1.0, 0.6)), 36.0, 1.2, 0.45, t)
-                 + wave(vec2(p.x, p.z + eps), normalize(vec2(-0.5, 1.0)), 22.0, 1.5, 0.25, t);
+        float hx = wave(vec2(p.x + eps, p.z), normalize(vec2(1.0, 0.6)), 60.0, 0.6, 0.55, t)
+                 + wave(vec2(p.x + eps, p.z), normalize(vec2(-0.5, 1.0)), 38.0, 0.8, 0.30, t);
+        float hz = wave(vec2(p.x, p.z + eps), normalize(vec2(1.0, 0.6)), 60.0, 0.6, 0.55, t)
+                 + wave(vec2(p.x, p.z + eps), normalize(vec2(-0.5, 1.0)), 38.0, 0.8, 0.30, t);
         vec3 nrm = normalize(vec3(h - hx, eps, h - hz));
         vNormal = (modelMatrix * vec4(nrm, 0.0)).xyz;
 
@@ -1645,15 +1931,24 @@ function makeOcean() {
         float ndl = max(dot(N, L), 0.0);
         vec3 diffuse = waterCol * (uAmbient * uAmbientI + uSunColor * uSunInt * ndl * 0.4);
 
+        // Sun glint — softer, broader shimmer
         vec3 R = reflect(-L, N);
-        float spec = pow(max(dot(R, V), 0.0), 80.0);
-        vec3 glint = uSunColor * spec * uSunInt * 1.4;
+        float spec = pow(max(dot(R, V), 0.0), 60.0);
+        vec3 glint = uSunColor * spec * uSunInt * 1.2;
 
+        // Fresnel
         float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
         vec3 reflectionCol = mix(uHorizon, vec3(1.0), 0.2);
         vec3 fresColor = reflectionCol * fres * (0.4 + uSunInt * 0.6);
 
-        vec3 col = diffuse + glint + fresColor;
+        // Foam: bright white on wave crests (where the surface is steep / high)
+        // Use the y-component of the normal — flatter normal = lower foam
+        float crestiness = 1.0 - abs(N.y);  // 0 flat, 1 steep
+        float foam = smoothstep(0.18, 0.32, crestiness) * 0.6 * (0.4 + uSunInt * 0.6);
+        // Foam is brighter near the shore
+        foam += smoothstep(40.0, 0.0, abs(vWorldPos.x)) * 0.25 * (0.4 + uSunInt * 0.6);
+
+        vec3 col = diffuse + glint + fresColor + vec3(foam);
 
         float dist = length(vWorldPos - cameraPosition);
         float fogFactor = 1.0 - exp(-uFogDensity * dist * dist);
@@ -1701,51 +1996,58 @@ function makeCity() {
   let rng = 0xc173;
   const r = () => { rng = (rng * 1664525 + 1013904223) & 0xffffffff; return ((rng >>> 0) / 4294967295); };
 
-  // Generate city in a strip from x=42 (just past beach) to x=380 (foothills start)
-  // Width along Z: ±900
+  // Generate city in a strip from x=45 (just past beach) to x=780 (forest start)
+  // Width along Z: ±1500 — much larger now
   const CITY_X_START = 45;
-  const CITY_X_END = 380;
-  const CITY_Z_HALF = 900;
+  const CITY_X_END = 780;
+  const CITY_Z_HALF = 1500;
 
-  // Block grid: simulate street layout (~ every 14 units)
-  const BLOCK_X = 14;
-  const BLOCK_Z = 14;
+  // Block grid: street layout (~ every 22 units, matches texture)
+  const BLOCK_X = 22;
+  const BLOCK_Z = 22;
 
   for (let bx = CITY_X_START; bx < CITY_X_END; bx += BLOCK_X) {
     for (let bz = -CITY_Z_HALF; bz < CITY_Z_HALF; bz += BLOCK_Z) {
       // Skip some blocks to leave gaps for streets/parks
       const skipR = r();
-      if (skipR < 0.15) continue;
+      if (skipR < 0.12) continue;
 
-      // Per-block: 1-3 buildings
-      const buildingsHere = 1 + Math.floor(r() * 3);
+      // Per-block: 2-5 buildings (denser)
+      const buildingsHere = 2 + Math.floor(r() * 4);
       for (let bi = 0; bi < buildingsHere; bi++) {
-        // Building footprint within block
-        const fpw = 2 + r() * 6;       // width along X
-        const fpd = 2 + r() * 6;       // depth along Z
-        // Heights: city center (mid-X) is taller, edges shorter
-        const cityT = (bx - CITY_X_START) / (CITY_X_END - CITY_X_START); // 0..1
-        const proximityToCenter = 1 - Math.abs(cityT - 0.4) * 2; // peak around 40% in
-        const baseH = 2 + r() * 4 + proximityToCenter * (3 + r() * 14);
-        // Occasional skyscrapers
-        const skyscraper = r() < 0.04 && proximityToCenter > 0.4;
-        const h = skyscraper ? baseH + 15 + r() * 30 : baseH;
+        // Building footprint
+        const fpw = 3 + r() * 8;
+        const fpd = 3 + r() * 8;
 
-        const px = bx + (r() - 0.5) * (BLOCK_X - fpw - 1);
-        const pz = bz + (r() - 0.5) * (BLOCK_Z - fpd - 1);
+        // Heights — LA-style: most are 2-8 stories, a downtown cluster has tall buildings
+        // Downtown center positioned at (cityX, cityZ) where cityX ~ 220 and cityZ ~ -100
+        const dx = bx - 220;
+        const dz = bz - (-100);
+        const downtownDist = Math.sqrt(dx * dx + dz * dz);
+        const downtownness = Math.max(0, 1 - downtownDist / 250);
+        const baseH = 2 + r() * 4;
+        // Skyscrapers more likely in downtown
+        const skyscraper = r() < (0.02 + downtownness * 0.18);
+        let h;
+        if (skyscraper) {
+          h = baseH + 18 + r() * 50;  // 20-70m
+        } else {
+          h = baseH + downtownness * (3 + r() * 12);
+        }
 
-        // Place building at terrain height
+        const px = bx + (r() - 0.5) * (BLOCK_X - fpw - 2);
+        const pz = bz + (r() - 0.5) * (BLOCK_Z - fpd - 2);
+
         const terrainY = landHeight(px, pz);
         const matIdx = Math.floor(r() * 3);
         const wallMat = mats[matIdx];
 
-        // Walls
         const walls = new THREE.Mesh(boxGeo, wallMat);
         walls.scale.set(fpw, h, fpd);
         walls.position.set(px, ENV_GROUND_Y + terrainY + h / 2, pz);
         group.add(walls);
 
-        // Roof box (slightly different shade)
+        // Roof box
         if (h > 4) {
           const roof = new THREE.Mesh(boxGeo, matRoof);
           roof.scale.set(fpw * 0.95, 0.4, fpd * 0.95);
@@ -1753,7 +2055,7 @@ function makeCity() {
           group.add(roof);
         }
 
-        // Windows: thin slab around the building, emissive at night
+        // Windows (emissive at night)
         if (h > 5) {
           const winSlab = new THREE.Mesh(boxGeo, matWin);
           winSlab.scale.set(fpw + 0.04, h * 0.85, fpd + 0.04);
@@ -1922,56 +2224,55 @@ function makeGulls() {
 }
 
 /* ---- Single airplane that crosses waypoints every 3s ---- */
-function makePlane() {
+function makePlane(opts = {}) {
+  const accentColor = opts.accent ?? 0x2860a8;
+  const altRange = opts.altRange ?? [60, 120];
+  const speedMps = opts.speed ?? 35;  // m/s — small GA ~30-50, jet ~80-100 (cruise)
+  const scaleMul = opts.scale ?? 1.0;
+
   const group = new THREE.Group();
 
-  // Lowpoly plane: fuselage cylinder, two wings, two tail fins
   const bodyMat = new THREE.MeshStandardMaterial({ color: 0xeeeef0, roughness: 0.5, flatShading: true, fog: true });
-  const accentMat = new THREE.MeshStandardMaterial({ color: 0x2860a8, roughness: 0.5, flatShading: true, fog: true });
+  const accentMat = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.5, flatShading: true, fog: true });
 
-  // Fuselage: along Z axis (so plane "noses" -Z by default)
+  // Fuselage along Z axis (nose → -Z)
   const body = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 0.8, 14, 8), bodyMat);
   body.rotation.x = Math.PI / 2;
   group.add(body);
 
-  // Nose cone
   const nose = new THREE.Mesh(new THREE.ConeGeometry(1.2, 3, 8), bodyMat);
   nose.rotation.x = -Math.PI / 2;
   nose.position.z = -8.5;
   group.add(nose);
 
-  // Wings
   const wing = new THREE.Mesh(new THREE.BoxGeometry(20, 0.5, 4), bodyMat);
   wing.position.set(0, -0.2, 1);
   group.add(wing);
 
-  // Wing accent stripe
   const wingStripe = new THREE.Mesh(new THREE.BoxGeometry(20, 0.6, 1), accentMat);
   wingStripe.position.set(0, -0.15, 2);
   group.add(wingStripe);
 
-  // Vertical tail
   const vtail = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.5, 3), bodyMat);
   vtail.position.set(0, 1.5, 6);
   group.add(vtail);
 
-  // Horizontal tail
   const htail = new THREE.Mesh(new THREE.BoxGeometry(7, 0.3, 2), bodyMat);
   htail.position.set(0, 0.6, 6.2);
   group.add(htail);
 
-  // Body stripe
   const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 14), accentMat);
   stripe.position.set(0, 1.1, 0);
   group.add(stripe);
 
-  // Initial position (somewhere in sky)
-  group.position.set(0, 60, 200);
+  group.scale.setScalar(scaleMul);
+  group.position.set(0, ENV_GROUND_Y + (altRange[0] + altRange[1]) / 2, 200);
 
   group.userData.fromPos = group.position.clone();
   group.userData.toPos = group.position.clone();
   group.userData.tStart = -1;
-  group.userData.duration = 3.0;
+  group.userData.altRange = altRange;
+  group.userData.speed = speedMps;
 
   return group;
 }
@@ -1983,14 +2284,19 @@ const oceanMesh = makeOcean();
 scene.add(oceanMesh);
 const cityGroup = makeCity();
 scene.add(cityGroup);
+const forestGroup = makeForest();
+scene.add(forestGroup);
 const islandsGroup = makeIslands();
 scene.add(islandsGroup);
 const palmsGroup = makePalms();
 scene.add(palmsGroup);
 const gullsGroup = makeGulls();
 scene.add(gullsGroup);
-const planeMesh = makePlane();
+// Two airplanes at different altitudes (small GA at low alt, jet at high alt)
+const planeMesh = makePlane({ accent: 0x2860a8, altRange: [80, 220], speed: 35, scale: 1.0 });
 scene.add(planeMesh);
+const planeMesh2 = makePlane({ accent: 0xc83a3a, altRange: [380, 620], speed: 90, scale: 1.6 });
+scene.add(planeMesh2);
 
 /* =====================================================
    4b. TIME-OF-DAY SYSTEM
@@ -2386,27 +2692,29 @@ function buildCloud(typeKey, densityMultiplier = 1.0) {
   return group;
 }
 
-// Adds 6-10 distant smaller cloud clumps around the main formation, populating the horizon.
+// Adds many distant smaller cloud clumps around the main formation, populating the entire sky.
 function addHorizonCompanions(parent, def, tex, baseHeight) {
-  const COMPANION_COUNT = (def.fibrous || def.grid) ? 10 : 8;
+  const COMPANION_COUNT = (def.fibrous || def.grid) ? 28 : 22;
   const golden = Math.PI * (3 - Math.sqrt(5));
-  // Seed deterministically per cloud type for stability
+  // Seeded so a given cloud type always gets the same ambient companions
   let rng = (def.abbr.charCodeAt(0) * 71 + def.abbr.charCodeAt(1) * 41) & 0xffff;
   const r = () => { rng = (rng * 1664525 + 1013904223) & 0xffffffff; return ((rng >>> 0) / 4294967295); };
 
   for (let i = 0; i < COMPANION_COUNT; i++) {
-    // Position: ring 280..600 units from origin (well outside main cloud's local bounds)
-    const dist = 280 + r() * 320;
-    const ang = i * golden + r() * 0.5;
+    // Position: ring 280..1500 units from origin, well past the main formation
+    const dist = 280 + Math.pow(r(), 0.6) * 1200;
+    const ang = i * golden + r() * 0.6;
     const px = Math.cos(ang) * dist;
     const pz = Math.sin(ang) * dist;
-    const py = (r() - 0.5) * 8;
+    // More vertical variety the farther out (clouds don't all sit at exact same altitude)
+    const py = (r() - 0.5) * 18;
 
-    // Smaller per-companion density
-    const sub = buildSingleClump(def, tex, 0.18 + r() * 0.15, i * 23.7);
+    // Smaller density so total particle count stays manageable
+    const sub = buildSingleClump(def, tex, 0.14 + r() * 0.18, i * 23.7);
     sub.position.set(px, py, pz);
-    // Smaller scale for distance-feel
-    const s = 0.45 + r() * 0.5;
+    // Distant clouds smaller (perspective + visual layering)
+    const distFactor = 1.0 - (dist - 280) / 1200 * 0.55;  // 1.0 close → 0.45 far
+    const s = (0.5 + r() * 0.5) * distFactor;
     sub.scale.setScalar(s);
     sub.rotation.y = r() * Math.PI * 2;
     sub.userData.isCompanion = true;
@@ -2848,39 +3156,41 @@ function updateGulls(dt, elapsed) {
   }
 }
 
-/* ---- Plane: picks a new waypoint every 3s, lerps smoothly toward it ---- */
-function updatePlane(dt, elapsed) {
-  if (!planeMesh) return;
-  const ud = planeMesh.userData;
+/* ---- Plane: realistic constant cruise speed; new waypoint when reached ---- */
+function updatePlane(plane, dt, elapsed) {
+  if (!plane) return;
+  const ud = plane.userData;
 
-  // Time to pick a new waypoint?
-  if (ud.tStart < 0 || elapsed - ud.tStart >= ud.duration) {
-    ud.fromPos.copy(planeMesh.position);
-    // New waypoint: 300-800 units from origin (in arbitrary direction in horizontal plane)
-    // 1 unit ≈ 1 meter for our scene scale
-    const dist = 300 + Math.random() * 500;
+  // Need new waypoint?
+  const needNew = ud.tStart < 0 || elapsed >= ud.tEnd;
+  if (needNew) {
+    ud.fromPos.copy(plane.position);
+    // New waypoint 600..1500 units away (so jets get a longer leg)
+    const dist = 600 + Math.random() * 900;
     const ang = Math.random() * Math.PI * 2;
-    const altY = 35 + Math.random() * 60; // 60..120 above sea level — typical small-plane low cruise
-    ud.toPos.set(Math.cos(ang) * dist, ENV_GROUND_Y + altY, Math.sin(ang) * dist);
+    const altMin = ud.altRange[0], altMax = ud.altRange[1];
+    const targetAlt = altMin + Math.random() * (altMax - altMin);
+    ud.toPos.set(Math.cos(ang) * dist, ENV_GROUND_Y + targetAlt, Math.sin(ang) * dist);
     ud.tStart = elapsed;
-    ud.duration = 3.0;
+    // Duration = distance / speed (m/s). 1 unit ≈ 1 meter in our scene scale.
+    const segDist = ud.fromPos.distanceTo(ud.toPos);
+    ud.tEnd = ud.tStart + segDist / ud.speed;
   }
 
-  const t = Math.min(1, (elapsed - ud.tStart) / ud.duration);
-  // Smooth ease so the plane doesn't jerk at waypoints
-  const ts = t * t * (3 - 2 * t);
-  planeMesh.position.lerpVectors(ud.fromPos, ud.toPos, ts);
+  const t = Math.min(1, (elapsed - ud.tStart) / Math.max(0.1, ud.tEnd - ud.tStart));
+  // Linear interpolation (constant speed); slight smoothstep at the very ends to avoid hard pivot
+  const ts = t < 0.1 ? t * t * 50 / 10 :
+             t > 0.9 ? 1 - (1 - t) * (1 - t) * 50 / 10 :
+             t;
+  plane.position.lerpVectors(ud.fromPos, ud.toPos, ts);
 
-  // Orient plane toward direction of travel
+  // Orient toward direction of travel
   const dir = _v0.subVectors(ud.toPos, ud.fromPos);
   if (dir.lengthSq() > 0.01) {
-    // Plane's nose is -Z (see makePlane), so face the velocity direction
     const angle = Math.atan2(dir.x, dir.z) + Math.PI;
-    planeMesh.rotation.y = angle;
-    // Bank slightly into turns based on horizontal-direction change rate
-    // (use a small amount of pitch from vertical change too)
+    plane.rotation.y = angle;
     const pitchTarget = -Math.atan2(dir.y, Math.hypot(dir.x, dir.z)) * 0.6;
-    planeMesh.rotation.x = pitchTarget;
+    plane.rotation.x = pitchTarget;
   }
 }
 
@@ -2908,8 +3218,9 @@ function animate() {
     updateGulls(dt, elapsed);
   }
 
-  // Plane waypoint navigation
-  updatePlane(dt, elapsed);
+  // Plane waypoint navigation (two planes at different altitudes)
+  updatePlane(planeMesh, dt, elapsed);
+  updatePlane(planeMesh2, dt, elapsed);
 
   // Wind vector in scene (normalize: dir 0 = north = -Z, 90 = east = +X)
   const dirRad = (windDir + 180) * Math.PI / 180; // wind FROM dir → moves TO opposite
@@ -2939,7 +3250,7 @@ function animate() {
     } else {
       // Single mode: per-sprite drift + wrap as before, but skip sprites inside companion groups
       // (those drift as whole groups, see below)
-      const COMPANION_WRAP = 800;
+      const COMPANION_WRAP = 1700;
       currentCloudGroup.children.forEach(child => {
         if (child.isGroup && child.userData.isCompanion) {
           // Drift the whole companion group
@@ -3125,9 +3436,11 @@ const modeToggleEls = [
 ].filter(Boolean);
 
 function setMode(newMode) {
-  // If switching to field but current cloud isn't eligible, fall back to single
+  // If switching to field but current cloud isn't eligible, auto-switch to Cumulus (most common field)
   if (newMode === 'field' && !isFieldEligible(cloudSelect.value)) {
-    newMode = 'single';
+    cloudSelect.value = 'Cu';
+    // Mirror to mobile
+    if (mCloudSelect) mCloudSelect.value = 'Cu';
   }
   sceneMode = newMode;
   modeToggleEls.forEach(group => {
@@ -3149,13 +3462,19 @@ function refreshModeToggleEnablement() {
   modeToggleEls.forEach(group => {
     const fieldBtn = group.querySelector('button[data-mode="field"]');
     if (fieldBtn) {
-      fieldBtn.disabled = !eligible;
-      fieldBtn.title = eligible ? 'Multiple cloud instances scattered across the scene' : 'Field mode is only available for discrete cloud types (Cu, Sc, Ac, Cc, Ci)';
+      fieldBtn.disabled = false;  // always enabled now (auto-switches cloud if needed)
+      fieldBtn.title = eligible
+        ? 'Field: scattered cloud field (multiple instances across the sky)'
+        : 'Field: switch to scattered cumulus pattern (this cloud type is not field-able, will auto-switch to Cu)';
     }
+    const singleBtn = group.querySelector('button[data-mode="single"]');
+    if (singleBtn) singleBtn.title = 'Single: one detailed formation in front + horizon clouds';
   });
-  // If user was in field but cloud changed to ineligible, snap back
+  // If user was in field but cloud changed to ineligible, snap back to single visually
+  // (the buildScene() switch already handles the rendering, but the toggle should reflect it)
   if (sceneMode === 'field' && !eligible) {
-    sceneMode = 'single';
+    // Don't snap back automatically — the user might switch to a Cu next.
+    // Instead, just visually mark single as active (since buildScene falls back to it)
     modeToggleEls.forEach(group => {
       group.querySelectorAll('button').forEach(b => {
         b.classList.toggle('active', b.dataset.mode === 'single');
@@ -3277,7 +3596,7 @@ let quizState = null;
 
 // Separate tiny renderer for quiz preview canvas
 let quizRenderer = null;
-let quizScene = null;
+// Quiz uses main scene now — no separate quizScene needed
 let quizCamera = null;
 let quizCloudGroup = null;
 let quizClock = new THREE.Clock();
@@ -3293,30 +3612,10 @@ function initQuizRenderer() {
   quizRenderer.setSize(w, h, false);
   quizRenderer.outputColorSpace = THREE.SRGBColorSpace;
 
-  quizScene = new THREE.Scene();
-  quizScene.fog = new THREE.FogExp2(0x0a121e, 0.004);
-  quizCamera = new THREE.PerspectiveCamera(55, w / h, 0.5, 2500);
+  // Quiz uses the SAME scene as the main view (so it shows the beach environment),
+  // just with its own camera. We swap clouds in/out as needed.
+  quizCamera = new THREE.PerspectiveCamera(55, w / h, 0.5, 6000);
   quizCamera.position.set(0, 18, 200);
-
-  // Share the same sky uniforms so quiz scene reflects current time-of-day
-  const quizSkyMat = new THREE.ShaderMaterial({
-    uniforms: skyUniforms, // shared reference
-    side: THREE.BackSide,
-    depthWrite: false,
-    fog: false,
-    vertexShader: skyMat.vertexShader,
-    fragmentShader: skyMat.fragmentShader
-  });
-  const quizSky = new THREE.Mesh(new THREE.SphereGeometry(1500, 48, 32), quizSkyMat);
-  quizSky.renderOrder = -1;
-  quizScene.add(quizSky);
-
-  // Dynamic lights mirroring main scene
-  quizScene.add(new THREE.AmbientLight(ambientLight.color, ambientLight.intensity));
-  const sun2 = new THREE.DirectionalLight(sun.color, sun.intensity);
-  sun2.position.copy(sun.position);
-  quizScene.add(sun2);
-  quizScene._sun = sun2; // ref for updates
 }
 
 function buildQuizCloud(typeKey) {
@@ -3328,10 +3627,13 @@ function buildQuizCloud(typeKey) {
         else o.material.dispose();
       }
     });
-    quizScene.remove(quizCloudGroup);
+    scene.remove(quizCloudGroup);
   }
 
-  // Re-use buildCloud logic but in quizScene
+  // Hide the main cloud while quiz is active so only the quiz cloud is visible
+  if (currentCloudGroup) currentCloudGroup.visible = false;
+
+  // Build a single clean clump (no horizon companions) for clarity
   const def = CLOUDS[typeKey];
   const group = new THREE.Group();
   group.userData.def = def;
@@ -3465,7 +3767,7 @@ function buildQuizCloud(typeKey) {
     }
   }
 
-  quizScene.add(group);
+  scene.add(group);
   quizCloudGroup = group;
   updateCloudLighting(group);
 }
@@ -3474,34 +3776,21 @@ function quizAnimate() {
   if (!quizRenderer) return;
   const elapsed = quizClock.elapsedTime;
 
-  // Sync quiz scene lighting/fog to current time-of-day
-  if (quizScene && quizScene._sun) {
-    quizScene._sun.position.copy(sun.position);
-    quizScene._sun.color.copy(sun.color);
-    quizScene._sun.intensity = sun.intensity;
-    // Update first ambient
-    quizScene.children.forEach(c => {
-      if (c.isAmbientLight) {
-        c.color.copy(ambientLight.color);
-        c.intensity = ambientLight.intensity;
-      }
-    });
-    quizScene.fog.color.copy(scene.fog.color);
-    quizScene.fog.density = scene.fog.density;
-  }
-
   if (quizCloudGroup) {
+    const def = quizCloudGroup.userData.def;
     const orbitR = 200;
     quizCamera.position.x = Math.sin(elapsed * 0.08) * orbitR;
     quizCamera.position.z = Math.cos(elapsed * 0.08) * orbitR;
-    quizCamera.position.y = 18 + Math.sin(elapsed * 0.3) * 3;
-    quizCamera.lookAt(0, etageBaseHeight(quizCloudGroup.userData.def) * 0.4, 0);
+    quizCamera.position.y = Math.max(ENV_GROUND_Y + 8, 18 + Math.sin(elapsed * 0.3) * 3);
+    quizCamera.lookAt(0, etageBaseHeight(def) * 0.4, 0);
     quizCloudGroup.children.forEach(s => {
+      if (!s.userData.basePos) return;
       s.position.y = s.userData.basePos.y + Math.sin(elapsed * 0.5 + s.userData.bobPhase) * 0.1;
     });
   }
   quizClock.getDelta();
-  quizRenderer.render(quizScene, quizCamera);
+  // Render the MAIN scene (which now contains quizCloudGroup) with the quiz camera
+  quizRenderer.render(scene, quizCamera);
   quizAnimId = requestAnimationFrame(quizAnimate);
 }
 
@@ -3529,6 +3818,19 @@ function setHighScore(s) {
 function endQuiz() {
   quizOverlay.classList.remove('active');
   if (quizAnimId) { cancelAnimationFrame(quizAnimId); quizAnimId = null; }
+  // Clean up: remove quiz cloud from main scene, restore main cloud visibility
+  if (quizCloudGroup) {
+    quizCloudGroup.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
+        else o.material.dispose();
+      }
+    });
+    scene.remove(quizCloudGroup);
+    quizCloudGroup = null;
+  }
+  if (currentCloudGroup) currentCloudGroup.visible = true;
 }
 
 function buildQuizRound() {
