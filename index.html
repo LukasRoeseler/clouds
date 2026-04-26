@@ -1,10 +1,17 @@
-
 <!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#05080d" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="description" content="CloudGen — Procedural 3D cloud atlas (WMO genera) for pilots and aviation enthusiasts." />
 <title>CloudGen — Procedural Cloud Atlas (WMO)</title>
+
+<!-- Inline SVG favicon: dark dashboard background, cyan cloud, accent sun -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='b' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%2305080d'/><stop offset='1' stop-color='%2318263a'/></linearGradient><radialGradient id='s' cx='0.5' cy='0.5' r='0.5'><stop offset='0' stop-color='%23fff0c8'/><stop offset='1' stop-color='%23fff0c8' stop-opacity='0'/></radialGradient></defs><rect width='64' height='64' rx='12' fill='url(%23b)'/><circle cx='46' cy='20' r='12' fill='url(%23s)'/><circle cx='46' cy='20' r='5' fill='%23fff0c8'/><path d='M14 44 q0 -10 10 -10 q2 -8 11 -8 q9 0 11 8 q9 0 9 9 q0 6 -7 6 H21 q-7 0 -7 -5 z' fill='%2300d2ff' opacity='0.92'/><path d='M14 44 q0 -10 10 -10 q2 -8 11 -8 q9 0 11 8 q9 0 9 9 q0 6 -7 6 H21 q-7 0 -7 -5 z' fill='none' stroke='%2300ffae' stroke-width='1' opacity='0.5'/></svg>" />
+<link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%2305080d'/><circle cx='46' cy='20' r='5' fill='%23fff0c8'/><path d='M14 44 q0 -10 10 -10 q2 -8 11 -8 q9 0 11 8 q9 0 9 9 q0 6 -7 6 H21 q-7 0 -7 -5 z' fill='%2300d2ff'/></svg>" />
 <style>
   /* ---------- AVIATION DASHBOARD THEME ---------- */
   :root {
@@ -36,11 +43,13 @@
     font-family: var(--sans);
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
   }
 
   #app {
     position: relative;
     width: 100vw; height: 100vh;
+    height: 100dvh;
     overflow: hidden;
   }
 
@@ -49,8 +58,8 @@
     position: absolute; inset: 0;
     width: 100%; height: 100%;
     display: block;
-    background:
-      radial-gradient(ellipse at 50% 110%, #1a2942 0%, #0a121e 45%, #05080d 100%);
+    background: #05080d;
+    touch-action: none;
   }
 
   /* HUD top bar */
@@ -602,25 +611,251 @@
   .compass .lbl.e { right: 6px; }
   .compass .lbl.w { left: 6px; }
 
-  /* Mobile/tablet */
+  /* Help card (bottom left) */
+  .help-card {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    background: rgba(10, 17, 25, 0.85);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    z-index: 12;
+    backdrop-filter: blur(6px);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--txt-mute);
+    letter-spacing: 0.05em;
+    line-height: 1.7;
+    max-width: 220px;
+    transition: opacity 0.2s;
+  }
+  .help-card kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    background: var(--bg-3);
+    border: 1px solid var(--line-2);
+    border-radius: 3px;
+    color: var(--txt);
+    font-size: 9px;
+    margin: 0 1px;
+  }
+  .help-card .toggle {
+    position: absolute;
+    top: 6px; right: 8px;
+    cursor: pointer;
+    color: var(--txt-mute);
+    font-size: 12px;
+    line-height: 1;
+    background: none;
+    border: none;
+    padding: 2px 4px;
+    width: auto;
+    flex: none;
+  }
+  .help-card .toggle:hover { color: var(--accent); background: none; }
+  .help-card.collapsed .body { display: none; }
+  .help-card.collapsed { padding: 6px 28px 6px 12px; }
+  .help-card .title {
+    color: var(--txt-dim);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 9px;
+    margin-bottom: 4px;
+  }
+
+  /* High score badge in quiz */
+  .hi-score {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--warn);
+    text-transform: uppercase;
+  }
+
   @media (max-width: 900px) {
+    .help-card { display: none; }
+  }
+
+  /* ============================================
+     MOBILE & TABLET LAYOUT
+     ============================================ */
+
+  /* Tablet (landscape phones / small tablets): keep side panels but trim them */
+  @media (max-width: 900px) and (min-width: 601px) {
     .hud-top .meta { display: none; }
-    .panel { width: calc(100% - 28px); max-width: 360px; max-height: 40vh; }
-    .info-card {
-      width: calc(100% - 28px); max-width: 360px;
-      top: auto;
-      bottom: 14px;
-      right: 14px;
-      max-height: 40vh;
-    }
-    .compass { display: none; }
+    .panel { width: 280px; max-height: calc(100vh - 80px); }
+    .info-card { width: 280px; max-height: calc(100vh - 80px); }
+    .compass { width: 70px; height: 70px; bottom: 12px; right: 12px; }
     .quiz-options { grid-template-columns: 1fr; }
     .result-stats { grid-template-columns: 1fr; }
   }
+
+  /* Mobile portrait: bottom-sheet pattern */
   @media (max-width: 600px) {
-    .panel, .info-card { width: calc(100% - 20px); max-width: none; left: 10px; right: 10px; }
-    .info-card { display: none; }
-    .panel.collapsed .panel-body { display: none; }
+    .hud-top {
+      padding: 0 12px;
+      padding-top: env(safe-area-inset-top, 0);
+      height: calc(46px + env(safe-area-inset-top, 0));
+    }
+    .hud-top .brand { font-size: 11px; gap: 8px; }
+    .hud-top .meta { display: none; }
+    .compass { display: none; }
+    .help-card { display: none; }
+
+    /* Hide the desktop side panels — replaced by bottom sheet */
+    .panel, .info-card { display: none; }
+
+    /* Mobile bottom sheet container */
+    .mobile-sheet {
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      left: 0; right: 0;
+      bottom: 0;
+      z-index: 18;
+      background: linear-gradient(180deg, rgba(10,17,25,0.96), rgba(5,8,13,0.98));
+      border-top: 1px solid var(--line-2);
+      box-shadow: 0 -8px 30px rgba(0,0,0,0.6);
+      backdrop-filter: blur(10px);
+      transform: translateY(calc(100% - 88px - env(safe-area-inset-bottom, 0px)));
+      transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+      max-height: 75vh;
+      padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+    .mobile-sheet.open { transform: translateY(0); }
+
+    .sheet-grip-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 16px;
+      flex: none;
+      cursor: pointer;
+      touch-action: none;
+    }
+    .sheet-grip {
+      width: 38px;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--line-2);
+    }
+
+    /* Quick peek bar visible when collapsed */
+    .sheet-peek {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px 6px 14px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--txt-dim);
+      letter-spacing: 0.05em;
+      flex: none;
+    }
+    .sheet-peek .pk-abbr {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .sheet-peek .pk-name { color: var(--txt); font-style: italic; }
+    .sheet-peek .pk-fl {
+      margin-left: auto;
+      color: var(--txt-mute);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .sheet-tabs {
+      display: flex;
+      flex: none;
+      border-bottom: 1px solid var(--line);
+      padding: 0 4px;
+    }
+    .sheet-tab {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--txt-mute);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 11px 6px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .sheet-tab:hover, .sheet-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      background: transparent;
+    }
+
+    .sheet-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px 14px 18px 14px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .sheet-body::-webkit-scrollbar { width: 4px; }
+    .sheet-body::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 2px; }
+
+    .sheet-pane { display: none; }
+    .sheet-pane.active { display: block; }
+
+    .sheet-pane h2 {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      color: var(--txt-dim);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .sheet-pane h2 .num { color: var(--accent); font-weight: 700; }
+    .sheet-pane h2:not(:first-child) { margin-top: 14px; }
+    .sheet-pane .field { margin-bottom: 12px; }
+    .sheet-pane .field label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      color: var(--txt-mute);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    /* Larger touch targets on mobile */
+    .sheet-pane select { padding: 12px 32px 12px 14px; font-size: 13px; }
+    .sheet-pane button { padding: 12px 14px; font-size: 12px; }
+    .sheet-pane input[type="range"] { padding: 8px 0; }
+    .sheet-pane input[type="range"]::-webkit-slider-thumb { width: 18px; height: 18px; margin-top: -7px; }
+    .sheet-pane input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; }
+
+    /* Quiz overlay tighter padding */
+    .quiz-overlay { padding: 10px; }
+    .quiz-modal {
+      padding: 16px;
+      max-height: calc(100vh - 20px);
+      border-radius: 10px;
+    }
+    .quiz-header h2 { font-size: 11px; letter-spacing: 0.1em; }
+    .quiz-canvas-wrap { height: 220px; }
+    .quiz-options { grid-template-columns: 1fr; gap: 8px; }
+    .quiz-option { padding: 12px 14px; }
+    .result-stats { grid-template-columns: 1fr; gap: 8px; }
+    .result-dash .grade { font-size: 64px; }
+    .result-list { max-height: 160px; }
+  }
+
+  /* Desktop: hide mobile sheet entirely */
+  @media (min-width: 601px) {
+    .mobile-sheet { display: none !important; }
   }
 </style>
 </head>
@@ -665,6 +900,11 @@
     <h2 style="margin-top:18px;"><span class="num">02</span> Atmosphere</h2>
 
     <div class="field">
+      <label>Time of Day <span class="slider-val" id="tod-val">14:00</span></label>
+      <input type="range" id="tod-slider" min="0" max="1440" value="840" step="5" />
+    </div>
+
+    <div class="field">
       <label>Wind Speed <span class="slider-val" id="wind-val">15 kt</span></label>
       <input type="range" id="wind-slider" min="0" max="120" value="15" step="1" />
     </div>
@@ -700,6 +940,88 @@
     <span class="lbl e">E</span>
     <span class="lbl s">S</span>
     <span class="lbl w">W</span>
+  </div>
+
+  <!-- Help card -->
+  <div class="help-card" id="help-card">
+    <button class="toggle" id="help-toggle" title="Toggle">×</button>
+    <div class="body">
+      <div class="title">Controls</div>
+      <div><kbd>Drag</kbd> orbit camera</div>
+      <div><kbd>Scroll</kbd> zoom</div>
+      <div><kbd>Space</kbd> reset view</div>
+      <div><kbd>R</kbd> randomize cloud</div>
+      <div><kbd>Q</kbd> start quiz</div>
+      <div><kbd>←</kbd>/<kbd>→</kbd> time of day</div>
+    </div>
+  </div>
+
+  <!-- Mobile bottom sheet (only visible on small screens) -->
+  <div class="mobile-sheet" id="mobile-sheet">
+    <div class="sheet-grip-bar" id="sheet-grip">
+      <div class="sheet-grip"></div>
+    </div>
+    <div class="sheet-peek" id="sheet-peek">
+      <span class="pk-abbr" id="peek-abbr">Cu</span>
+      <span class="pk-name" id="peek-name">Cumulus</span>
+      <span class="pk-fl" id="peek-fl">FL015–FL180</span>
+    </div>
+    <div class="sheet-tabs">
+      <button class="sheet-tab active" data-pane="cloud">Cloud</button>
+      <button class="sheet-tab" data-pane="atmo">Atmosphere</button>
+      <button class="sheet-tab" data-pane="info">Info</button>
+    </div>
+    <div class="sheet-body">
+
+      <!-- Cloud pane -->
+      <div class="sheet-pane active" data-pane="cloud">
+        <h2><span class="num">01</span> Cloud Selection</h2>
+        <div class="field">
+          <label>Genus (WMO)</label>
+          <div class="select-wrap">
+            <select id="m-cloud-select"></select>
+          </div>
+        </div>
+        <div class="btn-row" style="margin-bottom: 6px;">
+          <button id="m-btn-randomize" class="primary">⟳ Randomize</button>
+        </div>
+
+        <h2><span class="num">02</span> Training</h2>
+        <div class="btn-row">
+          <button id="m-btn-quiz" class="success">▶ Cloud Quiz</button>
+        </div>
+        <p style="font-size:11px; color: var(--txt-mute); margin-top: 8px; line-height:1.5; font-family: var(--mono); letter-spacing:0.03em;">
+          20 rounds. Identify the WMO genus from procedural visualization.
+        </p>
+      </div>
+
+      <!-- Atmosphere pane -->
+      <div class="sheet-pane" data-pane="atmo">
+        <h2><span class="num">03</span> Atmosphere</h2>
+        <div class="field">
+          <label>Time of Day <span class="slider-val" id="m-tod-val">14:00</span></label>
+          <input type="range" id="m-tod-slider" min="0" max="1440" value="840" step="5" />
+        </div>
+        <div class="field">
+          <label>Wind Speed <span class="slider-val" id="m-wind-val">15 kt</span></label>
+          <input type="range" id="m-wind-slider" min="0" max="120" value="15" step="1" />
+        </div>
+        <div class="field">
+          <label>Wind Direction <span class="slider-val" id="m-dir-val">270°</span></label>
+          <input type="range" id="m-dir-slider" min="0" max="359" value="270" step="1" />
+        </div>
+        <div class="field">
+          <label>Density <span class="slider-val" id="m-den-val">100%</span></label>
+          <input type="range" id="m-den-slider" min="20" max="150" value="100" step="5" />
+        </div>
+      </div>
+
+      <!-- Info pane (mirrors info-card content) -->
+      <div class="sheet-pane" data-pane="info">
+        <div id="m-info-body"></div>
+      </div>
+
+    </div>
   </div>
 
   <!-- Quiz overlay -->
@@ -963,8 +1285,9 @@ const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerH
 camera.position.set(0, 18, 220);
 camera.lookAt(0, 10, 0);
 
-// Ambient + directional sun light
-scene.add(new THREE.AmbientLight(0x6680a0, 0.65));
+// Ambient + directional sun light (dynamic, updated by setTimeOfDay)
+const ambientLight = new THREE.AmbientLight(0x6680a0, 0.65);
+scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xfff4d8, 1.1);
 sun.position.set(120, 180, 100);
 scene.add(sun);
@@ -972,45 +1295,275 @@ const fill = new THREE.DirectionalLight(0x3a5a80, 0.5);
 fill.position.set(-100, 60, -80);
 scene.add(fill);
 
-// Distant horizon plane (subtle)
-const horizonGeo = new THREE.PlaneGeometry(3000, 3000);
-const horizonMat = new THREE.MeshBasicMaterial({
-  color: 0x0a1320,
-  transparent: true,
-  opacity: 0.4,
-  side: THREE.DoubleSide,
-  depthWrite: false
-});
-const horizon = new THREE.Mesh(horizonGeo, horizonMat);
-horizon.rotation.x = -Math.PI / 2;
-horizon.position.y = -25;
-scene.add(horizon);
+/* ---------- SKY DOME (gradient shader) ---------- */
+const skyUniforms = {
+  uTopColor:    { value: new THREE.Color(0x1a4a85) },
+  uHorizonColor:{ value: new THREE.Color(0x9fc6e8) },
+  uGroundColor: { value: new THREE.Color(0x0a1320) },
+  uSunDir:      { value: new THREE.Vector3(0, 1, 0) },
+  uSunColor:    { value: new THREE.Color(0xfff0c8) },
+  uSunIntensity:{ value: 1.0 },
+  uMoonDir:     { value: new THREE.Vector3(0, -1, 0) },
+  uMoonIntensity:{ value: 0.0 }
+};
 
-// Subtle star/grid backdrop using points
+const skyGeo = new THREE.SphereGeometry(1500, 48, 32);
+const skyMat = new THREE.ShaderMaterial({
+  uniforms: skyUniforms,
+  side: THREE.BackSide,
+  depthWrite: false,
+  fog: false,
+  vertexShader: /* glsl */`
+    varying vec3 vWorldDir;
+    void main() {
+      vec4 worldPos = modelMatrix * vec4(position, 1.0);
+      vWorldDir = normalize(worldPos.xyz);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform vec3 uTopColor;
+    uniform vec3 uHorizonColor;
+    uniform vec3 uGroundColor;
+    uniform vec3 uSunDir;
+    uniform vec3 uSunColor;
+    uniform float uSunIntensity;
+    uniform vec3 uMoonDir;
+    uniform float uMoonIntensity;
+    varying vec3 vWorldDir;
+
+    void main() {
+      vec3 dir = normalize(vWorldDir);
+      float h = dir.y; // -1 ground .. +1 zenith
+
+      vec3 col;
+      if (h < 0.0) {
+        col = mix(uHorizonColor, uGroundColor, clamp(-h * 1.6, 0.0, 1.0));
+      } else {
+        float t = pow(clamp(h, 0.0, 1.0), 0.55);
+        col = mix(uHorizonColor, uTopColor, t);
+      }
+
+      // Sun
+      float sunDot = dot(dir, normalize(uSunDir));
+      if (uSunDir.y > -0.05) {
+        float disk = smoothstep(0.9985, 0.9998, sunDot);
+        float halo = pow(max(sunDot, 0.0), 64.0) * 0.6;
+        float bigGlow = pow(max(sunDot, 0.0), 8.0) * 0.18;
+        col += uSunColor * (disk * 3.0 + halo + bigGlow) * uSunIntensity;
+      }
+
+      // Moon (only at night, when intensity > 0)
+      if (uMoonIntensity > 0.01 && uMoonDir.y > -0.05) {
+        float moonDot = dot(dir, normalize(uMoonDir));
+        float mDisk = smoothstep(0.9988, 0.9998, moonDot);
+        float mHalo = pow(max(moonDot, 0.0), 96.0) * 0.4;
+        float mGlow = pow(max(moonDot, 0.0), 12.0) * 0.06;
+        vec3 moonCol = vec3(0.92, 0.94, 1.0);
+        col += moonCol * (mDisk * 2.2 + mHalo + mGlow) * uMoonIntensity;
+      }
+
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `
+});
+const skyDome = new THREE.Mesh(skyGeo, skyMat);
+skyDome.renderOrder = -1;
+scene.add(skyDome);
+
+// Stars (only visible at night via opacity)
 function makeStars() {
-  const count = 350;
+  const count = 600;
   const geo = new THREE.BufferGeometry();
   const positions = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
-    const r = 800 + Math.random() * 400;
+    const r = 1200;
     const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos(0.3 + Math.random() * 0.6); // upper hemisphere
+    const phi = Math.acos(0.05 + Math.random() * 0.9);
     positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
     positions[i * 3 + 1] = r * Math.cos(phi);
     positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
   }
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const mat = new THREE.PointsMaterial({
-    color: 0x6688aa,
-    size: 1.2,
+    color: 0xddeeff,
+    size: 1.6,
     sizeAttenuation: false,
     transparent: true,
-    opacity: 0.4,
-    depthWrite: false
+    opacity: 0,
+    depthWrite: false,
+    fog: false
   });
   return new THREE.Points(geo, mat);
 }
-scene.add(makeStars());
+const stars = makeStars();
+stars.renderOrder = -0.5;
+scene.add(stars);
+
+/* =====================================================
+   4b. TIME-OF-DAY SYSTEM
+   ===================================================== */
+let timeOfDay = 14.0; // hours, 0..24
+let cloudTintColor = new THREE.Color(0xffffff);
+let cloudShadeColor = new THREE.Color(0x6080a0);
+let cloudRimColor = new THREE.Color(0xffffff);
+const sunWorldDir = new THREE.Vector3(0, 1, 0); // updated each frame
+
+// Color palette keyframes for sky / sun / ambient through the day
+// Each entry: { h: hour, top, horizon, ground, sun, ambient, sunI, ambI }
+function lerpColor(a, b, t, out) {
+  out.r = a.r + (b.r - a.r) * t;
+  out.g = a.g + (b.g - a.g) * t;
+  out.b = a.b + (b.b - a.b) * t;
+  return out;
+}
+
+const SKY_KEYS = [
+  // Deep night
+  { h: 0,  top: 0x020610, horizon: 0x0a1428, ground: 0x000308, sun: 0x202840, ambient: 0x101830, sunI: 0.0, ambI: 0.18, fogD: 0.0042 },
+  // Pre-dawn
+  { h: 5,  top: 0x081428, horizon: 0x2a2840, ground: 0x080a14, sun: 0x402840, ambient: 0x1a2030, sunI: 0.05, ambI: 0.22, fogD: 0.0048 },
+  // Sunrise (warm orange/pink)
+  { h: 6.5,top: 0x4a5478, horizon: 0xff9966, ground: 0x281a18, sun: 0xffaa55, ambient: 0x6a4a4a, sunI: 0.7, ambI: 0.45, fogD: 0.0050 },
+  // Morning
+  { h: 9,  top: 0x2870c8, horizon: 0xa8d0ee, ground: 0x182838, sun: 0xfff0d0, ambient: 0x90a8c0, sunI: 1.05, ambI: 0.62, fogD: 0.0035 },
+  // Midday (clear blue)
+  { h: 13, top: 0x1a5fb8, horizon: 0xb8d8f0, ground: 0x182838, sun: 0xffffee, ambient: 0xa0b8d0, sunI: 1.2, ambI: 0.7, fogD: 0.0032 },
+  // Afternoon
+  { h: 16, top: 0x2068c0, horizon: 0xc0d8ee, ground: 0x182838, sun: 0xfff4d0, ambient: 0xa0b0c8, sunI: 1.1, ambI: 0.65, fogD: 0.0035 },
+  // Sunset (golden)
+  { h: 18.5, top: 0x8a5a78, horizon: 0xff7a3a, ground: 0x2a1818, sun: 0xff8848, ambient: 0x80505a, sunI: 0.85, ambI: 0.5, fogD: 0.0050 },
+  // Dusk (purple)
+  { h: 20, top: 0x202850, horizon: 0x4a3458, ground: 0x10101c, sun: 0x603858, ambient: 0x303048, sunI: 0.15, ambI: 0.28, fogD: 0.0048 },
+  // Night
+  { h: 22, top: 0x040820, horizon: 0x101830, ground: 0x000308, sun: 0x202840, ambient: 0x141a2a, sunI: 0.0, ambI: 0.2, fogD: 0.0042 },
+  { h: 24, top: 0x020610, horizon: 0x0a1428, ground: 0x000308, sun: 0x202840, ambient: 0x101830, sunI: 0.0, ambI: 0.18, fogD: 0.0042 },
+];
+
+const _tmpA = new THREE.Color(), _tmpB = new THREE.Color();
+
+function sampleSky(h) {
+  // Find segment
+  let i = 0;
+  while (i < SKY_KEYS.length - 1 && SKY_KEYS[i + 1].h <= h) i++;
+  const a = SKY_KEYS[i];
+  const b = SKY_KEYS[Math.min(i + 1, SKY_KEYS.length - 1)];
+  const span = (b.h - a.h) || 1;
+  const t = Math.max(0, Math.min(1, (h - a.h) / span));
+  // Smoothstep interpolation for nicer transitions
+  const ts = t * t * (3 - 2 * t);
+  return {
+    top: lerpColor(_tmpA.setHex(a.top), _tmpB.setHex(b.top), ts, new THREE.Color()),
+    horizon: lerpColor(_tmpA.setHex(a.horizon), _tmpB.setHex(b.horizon), ts, new THREE.Color()),
+    ground: lerpColor(_tmpA.setHex(a.ground), _tmpB.setHex(b.ground), ts, new THREE.Color()),
+    sun: lerpColor(_tmpA.setHex(a.sun), _tmpB.setHex(b.sun), ts, new THREE.Color()),
+    ambient: lerpColor(_tmpA.setHex(a.ambient), _tmpB.setHex(b.ambient), ts, new THREE.Color()),
+    sunI: a.sunI + (b.sunI - a.sunI) * ts,
+    ambI: a.ambI + (b.ambI - a.ambI) * ts,
+    fogD: a.fogD + (b.fogD - a.fogD) * ts,
+  };
+}
+
+function sunDirectionAt(hours) {
+  // Sun arc: rises in east (+X) at h=6, zenith at h=12 (overhead, slight south Y), sets in west (-X) at h=18
+  // Map hours to angle: -90° at 6h (east horizon), 0° at 12h (overhead), +90° at 18h (west horizon)
+  const angle = ((hours - 12) / 6) * (Math.PI / 2); // -π/2 .. +π/2 between 6h and 18h
+  // Below horizon outside daylight
+  const x = Math.sin(angle);
+  const y = Math.cos(angle); // 1 at noon, 0 at 6/18, negative at night
+  // Slight tilt toward camera
+  const z = 0.25;
+  return new THREE.Vector3(x, y, z).normalize();
+}
+
+function setTimeOfDay(hours) {
+  timeOfDay = ((hours % 24) + 24) % 24;
+  const s = sampleSky(timeOfDay);
+
+  skyUniforms.uTopColor.value.copy(s.top);
+  skyUniforms.uHorizonColor.value.copy(s.horizon);
+  skyUniforms.uGroundColor.value.copy(s.ground);
+  skyUniforms.uSunColor.value.copy(s.sun);
+  skyUniforms.uSunIntensity.value = s.sunI;
+
+  const sd = sunDirectionAt(timeOfDay);
+  skyUniforms.uSunDir.value.copy(sd);
+  sunWorldDir.copy(sd);
+
+  // Moon: opposite arc, peaks at midnight
+  // At hour H, moon hour-equivalent is (H + 12) % 24 — i.e. moon's "noon" is midnight
+  const moonHour = (timeOfDay + 12) % 24;
+  const md = sunDirectionAt(moonHour);
+  skyUniforms.uMoonDir.value.copy(md);
+  // Moon is visible at night (sun below or near horizon)
+  const moonI = Math.max(0, Math.min(1, (-sd.y + 0.1) * 2.0));
+  skyUniforms.uMoonIntensity.value = moonI;
+
+  // Position the directional light at sun direction (far away)
+  sun.position.set(sd.x * 400, sd.y * 400, sd.z * 400);
+  sun.color.copy(s.sun);
+  sun.intensity = s.sunI;
+
+  // Fill light: at night becomes a cool moon-light
+  if (moonI > 0.2 && md.y > 0) {
+    fill.position.set(md.x * 200, md.y * 200, md.z * 200);
+    fill.color.setHex(0x6a82a8);
+    fill.intensity = 0.25 * moonI;
+  } else {
+    fill.position.set(-sd.x * 200, Math.max(0.2, sd.y) * 100, -sd.z * 200);
+    fill.color.copy(s.horizon);
+    fill.intensity = 0.25 + s.ambI * 0.3;
+  }
+
+  // Ambient
+  ambientLight.color.copy(s.ambient);
+  ambientLight.intensity = s.ambI;
+
+  // Fog: tint to horizon, density slightly higher at night/sunset
+  scene.fog.color.copy(s.horizon).multiplyScalar(0.6);
+  scene.fog.density = s.fogD;
+
+  // Cloud lighting palette
+  cloudTintColor.copy(s.sun).lerp(new THREE.Color(1, 1, 1), 0.4);
+  cloudShadeColor.copy(s.ambient).lerp(s.horizon, 0.5).multiplyScalar(0.55);
+  cloudRimColor.copy(s.sun).lerp(new THREE.Color(1, 1, 1), 0.2);
+
+  // At deep night with moon up, lift the shade color slightly toward cool blue moonlight
+  if (moonI > 0.3 && md.y > 0) {
+    const moonTint = new THREE.Color(0x8aa8d0);
+    cloudTintColor.lerp(moonTint, moonI * 0.7);
+    cloudShadeColor.lerp(new THREE.Color(0x202838), 0.4);
+  }
+
+  // Stars
+  let starOp = 0;
+  if (timeOfDay < 5 || timeOfDay > 20.5) starOp = 0.9;
+  else if (timeOfDay < 6) starOp = (6 - timeOfDay) / 1.0 * 0.9;
+  else if (timeOfDay > 19.5) starOp = (timeOfDay - 19.5) / 1.0 * 0.9;
+  stars.material.opacity = Math.max(0, Math.min(0.9, starOp));
+
+  // Update existing cloud lighting
+  if (currentCloudGroup) updateCloudLighting(currentCloudGroup);
+  if (quizCloudGroup) updateCloudLighting(quizCloudGroup);
+}
+
+// Recompute per-particle base color for current sun direction
+function updateCloudLighting(group) {
+  group.children.forEach(sprite => {
+    const ud = sprite.userData;
+    if (ud.litFactor === undefined) return; // skip dark base particles (have static color)
+    // Particles "facing" the sun get more cloudTint, away get cloudShade.
+    // For billboards we don't have a real normal, so we use a randomized "facing" parameter
+    // baked at creation (litFactor in 0..1). Combined with sunDir.y for global brightness.
+    const dayBoost = Math.max(0.15, sunWorldDir.y * 0.6 + 0.4); // 0.15 night .. 1.0 noon
+    const litMix = ud.litFactor;
+    // Color = mix(shade, tint, litMix) * baseShade * dayBoost
+    const r = (cloudShadeColor.r * (1 - litMix) + cloudTintColor.r * litMix) * ud.baseShade * dayBoost;
+    const g = (cloudShadeColor.g * (1 - litMix) + cloudTintColor.g * litMix) * ud.baseShade * dayBoost;
+    const b = (cloudShadeColor.b * (1 - litMix) + cloudTintColor.b * litMix) * ud.baseShade * dayBoost;
+    sprite.material.color.setRGB(r, g, b);
+  });
+}
 
 /* =====================================================
    5. CLOUD BUILDER
@@ -1040,7 +1593,7 @@ function buildCloud(typeKey, densityMultiplier = 1.0) {
   group.userData.def = def;
 
   const tex = buildPuffTexture({
-    size: 128,
+    size: 256,
     fibrous: !!def.fibrous,
     dense: !!def.dense,
     seed: typeKey.charCodeAt(0) + typeKey.charCodeAt(1)
@@ -1161,9 +1714,15 @@ function buildCloud(typeKey, densityMultiplier = 1.0) {
 
     sprite.position.set(px, py, pz);
     sprite.scale.set(sx, sy, 1);
-    // Subtle per-particle color variation
-    const shade = 0.85 + Math.random() * 0.18;
-    sprite.material.color.setRGB(baseColor.r * shade, baseColor.g * shade, baseColor.b * shade);
+    // Per-particle metadata for dynamic lighting
+    sprite.userData.baseShade = 0.85 + Math.random() * 0.18;
+    // litFactor: how "exposed to sun" this particle appears.
+    // Higher Y (cloud top) and side facing sun get higher values.
+    // Use position + randomness for variety
+    const sunFacing = sprite.position.clone().normalize().dot(sunWorldDir);
+    sprite.userData.litFactor = Math.max(0, Math.min(1,
+      0.45 + sunFacing * 0.35 + (sprite.position.y - baseHeight) / 60 + (Math.random() - 0.5) * 0.25
+    ));
 
     // Store metadata for animation
     sprite.userData.driftX = (Math.random() - 0.5) * 0.2;
@@ -1177,7 +1736,7 @@ function buildCloud(typeKey, densityMultiplier = 1.0) {
 
   // CB extra: dark base shadow particles
   if (def.isCb) {
-    const darkTex = buildPuffTexture({ size: 128, dense: true, seed: 99 });
+    const darkTex = buildPuffTexture({ size: 256, dense: true, seed: 99 });
     for (let i = 0; i < 40; i++) {
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
         map: darkTex,
@@ -1204,6 +1763,7 @@ function buildCloud(typeKey, densityMultiplier = 1.0) {
 
   scene.add(group);
   currentCloudGroup = group;
+  updateCloudLighting(group);
   return group;
 }
 
@@ -1215,6 +1775,83 @@ function etageBaseHeight(def) {
   if (def.etage === 'Vertical') return -5; // CB starts low
   return 0;
 }
+
+/* =====================================================
+   6b. CAMERA CONTROLS (orbit + zoom, manual override)
+   ===================================================== */
+const camState = {
+  azimuth: 0,        // current orbit angle (radians)
+  azimuthAuto: 0,    // accumulator for auto orbit
+  radius: 220,
+  height: 18,
+  targetY: 0,
+  manual: false,
+  lastInputTime: 0
+};
+
+const RESUME_AFTER = 4000; // ms of inactivity → resume auto-orbit
+
+function markManual() {
+  camState.manual = true;
+  camState.lastInputTime = performance.now();
+}
+
+// Mouse / touch drag handling
+let dragging = false;
+let lastX = 0, lastY = 0;
+
+sceneCanvas.addEventListener('pointerdown', e => {
+  if (e.button !== 0 && e.pointerType === 'mouse') return;
+  dragging = true;
+  lastX = e.clientX;
+  lastY = e.clientY;
+  sceneCanvas.setPointerCapture(e.pointerId);
+  markManual();
+});
+sceneCanvas.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const dx = e.clientX - lastX;
+  const dy = e.clientY - lastY;
+  lastX = e.clientX;
+  lastY = e.clientY;
+  camState.azimuth -= dx * 0.005;
+  camState.height = Math.max(-40, Math.min(120, camState.height + dy * 0.4));
+  markManual();
+});
+sceneCanvas.addEventListener('pointerup', e => {
+  dragging = false;
+  try { sceneCanvas.releasePointerCapture(e.pointerId); } catch(_) {}
+});
+sceneCanvas.addEventListener('pointercancel', () => { dragging = false; });
+
+sceneCanvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = Math.exp(e.deltaY * 0.001);
+  camState.radius = Math.max(50, Math.min(600, camState.radius * factor));
+  markManual();
+}, { passive: false });
+
+// Pinch zoom on touch
+let pinchInitial = 0;
+let pinchInitialRadius = 0;
+sceneCanvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    pinchInitial = Math.hypot(dx, dy);
+    pinchInitialRadius = camState.radius;
+    dragging = false;
+  }
+}, { passive: true });
+sceneCanvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 2 && pinchInitial > 0) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const d = Math.hypot(dx, dy);
+    camState.radius = Math.max(50, Math.min(600, pinchInitialRadius * (pinchInitial / d)));
+    markManual();
+  }
+}, { passive: true });
 
 /* =====================================================
    6. ANIMATION & WIND
@@ -1256,20 +1893,35 @@ function animate() {
       if (sprite.position.z < -wrap) { sprite.position.z += wrap * 2; sprite.userData.basePos.z += wrap * 2; }
     });
 
-    // Slow camera orbit for visual interest
-    const orbitSpeed = 0.04;
-    const orbitR = 220;
-    const cx = Math.sin(elapsed * orbitSpeed) * orbitR;
-    const cz = Math.cos(elapsed * orbitSpeed) * orbitR;
-    camera.position.x = cx;
-    camera.position.z = cz;
-    camera.position.y = 18 + Math.sin(elapsed * 0.2) * 4;
-    camera.lookAt(0, etageBaseHeight(currentCloudGroup.userData.def) * 0.4, 0);
+    // Camera: auto-orbit unless user interacted recently
+    const now = performance.now();
+    const sinceInput = now - camState.lastInputTime;
+    const autoActive = !camState.manual || (sinceInput > RESUME_AFTER && !dragging);
+    if (autoActive) {
+      camState.manual = false;
+      camState.azimuthAuto += dt * 0.04;
+      // Smoothly blend manual azimuth back toward auto
+      const targetAz = camState.azimuthAuto;
+      // gentle ease toward target
+      let delta = targetAz - camState.azimuth;
+      // Wrap delta into -π..π
+      delta = ((delta + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+      camState.azimuth += delta * Math.min(1, dt * 0.5);
+    } else {
+      camState.azimuthAuto = camState.azimuth; // keep auto in sync for smooth resume
+    }
 
-    // Update compass
-    const compassAngle = (elapsed * orbitSpeed * 180 / Math.PI) % 360;
+    const az = camState.azimuth;
+    const focusY = etageBaseHeight(currentCloudGroup.userData.def) * 0.4;
+    camera.position.x = Math.sin(az) * camState.radius;
+    camera.position.z = Math.cos(az) * camState.radius;
+    camera.position.y = camState.height + Math.sin(elapsed * 0.2) * 1.5;
+    camera.lookAt(0, focusY, 0);
+
+    // Update compass — show camera bearing relative to north (-Z)
+    const bearing = (Math.atan2(camera.position.x, camera.position.z) * 180 / Math.PI + 360) % 360;
     const needle = document.getElementById('compass-needle');
-    if (needle) needle.style.transform = `rotate(${compassAngle}deg)`;
+    if (needle) needle.style.transform = `rotate(${bearing}deg)`;
   }
 
   renderer.render(scene, camera);
@@ -1385,6 +2037,22 @@ document.getElementById('btn-randomize').addEventListener('click', () => {
   setCloud(next);
 });
 
+const todSlider = document.getElementById('tod-slider');
+const todVal = document.getElementById('tod-val');
+function fmtTime(mins) {
+  const h = Math.floor(mins / 60);
+  const m = Math.floor(mins % 60);
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+todSlider.addEventListener('input', e => {
+  const mins = +e.target.value;
+  const hours = mins / 60;
+  todVal.textContent = fmtTime(mins);
+  e.target.style.setProperty('--val', `${(mins / 1440) * 100}%`);
+  setTimeOfDay(hours);
+});
+todSlider.style.setProperty('--val', `${(840/1440)*100}%`);
+
 const windSlider = document.getElementById('wind-slider');
 const windVal = document.getElementById('wind-val');
 windSlider.addEventListener('input', e => {
@@ -1464,13 +2132,28 @@ function initQuizRenderer() {
 
   quizScene = new THREE.Scene();
   quizScene.fog = new THREE.FogExp2(0x0a121e, 0.004);
-  quizCamera = new THREE.PerspectiveCamera(55, w / h, 0.5, 1500);
+  quizCamera = new THREE.PerspectiveCamera(55, w / h, 0.5, 2500);
   quizCamera.position.set(0, 18, 200);
 
-  quizScene.add(new THREE.AmbientLight(0x6680a0, 0.7));
-  const sun2 = new THREE.DirectionalLight(0xfff4d8, 1.0);
-  sun2.position.set(120, 180, 100);
+  // Share the same sky uniforms so quiz scene reflects current time-of-day
+  const quizSkyMat = new THREE.ShaderMaterial({
+    uniforms: skyUniforms, // shared reference
+    side: THREE.BackSide,
+    depthWrite: false,
+    fog: false,
+    vertexShader: skyMat.vertexShader,
+    fragmentShader: skyMat.fragmentShader
+  });
+  const quizSky = new THREE.Mesh(new THREE.SphereGeometry(1500, 48, 32), quizSkyMat);
+  quizSky.renderOrder = -1;
+  quizScene.add(quizSky);
+
+  // Dynamic lights mirroring main scene
+  quizScene.add(new THREE.AmbientLight(ambientLight.color, ambientLight.intensity));
+  const sun2 = new THREE.DirectionalLight(sun.color, sun.intensity);
+  sun2.position.copy(sun.position);
   quizScene.add(sun2);
+  quizScene._sun = sun2; // ref for updates
 }
 
 function buildQuizCloud(typeKey) {
@@ -1491,7 +2174,7 @@ function buildQuizCloud(typeKey) {
   group.userData.def = def;
 
   const tex = buildPuffTexture({
-    size: 128,
+    size: 256,
     fibrous: !!def.fibrous,
     dense: !!def.dense,
     seed: typeKey.charCodeAt(0) + typeKey.charCodeAt(1)
@@ -1590,8 +2273,11 @@ function buildQuizCloud(typeKey) {
 
     sprite.position.set(px, py, pz);
     sprite.scale.set(sx, sy, 1);
-    const shade = 0.85 + Math.random() * 0.18;
-    sprite.material.color.setRGB(baseColor.r * shade, baseColor.g * shade, baseColor.b * shade);
+    sprite.userData.baseShade = 0.85 + Math.random() * 0.18;
+    const sunFacing = sprite.position.clone().normalize().dot(sunWorldDir);
+    sprite.userData.litFactor = Math.max(0, Math.min(1,
+      0.45 + sunFacing * 0.35 + (sprite.position.y - baseHeight) / 60 + (Math.random() - 0.5) * 0.25
+    ));
     sprite.userData.basePos = sprite.position.clone();
     sprite.userData.bobPhase = Math.random() * Math.PI * 2;
     group.add(sprite);
@@ -1599,7 +2285,7 @@ function buildQuizCloud(typeKey) {
 
   // CB extra dark base
   if (def.isCb) {
-    const darkTex = buildPuffTexture({ size: 128, dense: true, seed: 99 });
+    const darkTex = buildPuffTexture({ size: 256, dense: true, seed: 99 });
     for (let i = 0; i < 40; i++) {
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
         map: darkTex, color: new THREE.Color(0x202830),
@@ -1618,11 +2304,29 @@ function buildQuizCloud(typeKey) {
 
   quizScene.add(group);
   quizCloudGroup = group;
+  updateCloudLighting(group);
 }
 
 function quizAnimate() {
   if (!quizRenderer) return;
   const elapsed = quizClock.elapsedTime;
+
+  // Sync quiz scene lighting/fog to current time-of-day
+  if (quizScene && quizScene._sun) {
+    quizScene._sun.position.copy(sun.position);
+    quizScene._sun.color.copy(sun.color);
+    quizScene._sun.intensity = sun.intensity;
+    // Update first ambient
+    quizScene.children.forEach(c => {
+      if (c.isAmbientLight) {
+        c.color.copy(ambientLight.color);
+        c.intensity = ambientLight.intensity;
+      }
+    });
+    quizScene.fog.color.copy(scene.fog.color);
+    quizScene.fog.density = scene.fog.density;
+  }
+
   if (quizCloudGroup) {
     const orbitR = 200;
     quizCamera.position.x = Math.sin(elapsed * 0.08) * orbitR;
@@ -1649,6 +2353,14 @@ function startQuiz() {
   };
   quizOverlay.classList.add('active');
   renderQuizRound();
+}
+
+function getHighScore() {
+  try { return parseInt(localStorage.getItem('cloudgen_hi') || '0', 10) || 0; }
+  catch(_) { return 0; }
+}
+function setHighScore(s) {
+  try { localStorage.setItem('cloudgen_hi', String(s)); } catch(_) {}
 }
 
 function endQuiz() {
@@ -1694,7 +2406,7 @@ function renderQuizRound() {
     </div>
     <div class="quiz-progress">
       <span>Progress: <span>${quizState.round}/${ROUNDS}</span></span>
-      <span>Score: <span class="score">${quizState.score}</span></span>
+      <span>Score: <span class="score">${quizState.score}</span> · <span class="hi-score">HI ${getHighScore()}</span></span>
     </div>
     <div class="progress-bar"><div class="fill" style="width:${progressPct}%"></div></div>
 
@@ -1776,6 +2488,12 @@ function renderQuizRound() {
 function renderResult() {
   if (quizAnimId) { cancelAnimationFrame(quizAnimId); quizAnimId = null; }
   const acc = quizState.correct / ROUNDS;
+
+  const prevHi = getHighScore();
+  const isNewHi = quizState.score > prevHi;
+  if (isNewHi) setHighScore(quizState.score);
+  const currentHi = getHighScore();
+
   let grade, label, isPoor = false;
   if (acc >= 0.95) { grade = 'A+'; label = 'Captain Class — Outstanding!'; }
   else if (acc >= 0.85) { grade = 'A'; label = 'IFR Rated — Excellent recognition'; }
@@ -1792,6 +2510,7 @@ function renderResult() {
     <div class="result-dash">
       <div class="grade ${isPoor ? 'poor' : ''}">${grade}</div>
       <div class="summary">${label}</div>
+      ${isNewHi ? `<div style="font-family: var(--mono); font-size: 12px; color: var(--warn); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 16px;">★ New Personal Best ★</div>` : ''}
 
       <div class="result-stats">
         <div class="stat">
@@ -1806,6 +2525,10 @@ function renderResult() {
           <div class="lbl">Accuracy</div>
           <div class="val ${acc >= 0.7 ? 'ok' : acc >= 0.5 ? 'warn' : 'danger'}">${Math.round(acc * 100)}%</div>
         </div>
+      </div>
+
+      <div style="font-family: var(--mono); font-size: 10px; color: var(--txt-mute); letter-spacing: 0.12em; margin-bottom: 14px;">
+        Personal Best: <span style="color: var(--warn);">${currentHi}</span> / ${ROUNDS * 5}
       </div>
 
       <div class="result-list" id="result-list">
@@ -1840,9 +2563,192 @@ document.addEventListener('keydown', e => {
 });
 
 /* =====================================================
+   10b. KEYBOARD SHORTCUTS
+   ===================================================== */
+// Help card toggle
+const helpCard = document.getElementById('help-card');
+const helpToggle = document.getElementById('help-toggle');
+helpToggle.addEventListener('click', () => {
+  helpCard.classList.toggle('collapsed');
+  helpToggle.textContent = helpCard.classList.contains('collapsed') ? '?' : '×';
+});
+document.addEventListener('keydown', e => {
+  // Don't fire when typing in inputs (none here, but safe)
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  // Don't fire while quiz is open (Escape handler above takes care of close)
+  if (quizOverlay.classList.contains('active')) return;
+
+  if (e.key === 'r' || e.key === 'R') {
+    document.getElementById('btn-randomize').click();
+  } else if (e.key === 'q' || e.key === 'Q') {
+    document.getElementById('btn-quiz').click();
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    todSlider.value = Math.min(1440, +todSlider.value + 30);
+    todSlider.dispatchEvent(new Event('input'));
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    todSlider.value = Math.max(0, +todSlider.value - 30);
+    todSlider.dispatchEvent(new Event('input'));
+  } else if (e.key === ' ') {
+    e.preventDefault();
+    // Reset camera to auto-orbit
+    camState.manual = false;
+    camState.lastInputTime = 0;
+    camState.height = 18;
+    camState.radius = 220;
+  }
+});
+
+/* =====================================================
+   10c. MOBILE BOTTOM SHEET
+   ===================================================== */
+const mobileSheet = document.getElementById('mobile-sheet');
+const sheetGrip = document.getElementById('sheet-grip');
+const sheetTabs = document.querySelectorAll('.sheet-tab');
+const sheetPanes = document.querySelectorAll('.sheet-pane');
+
+// Open/close behaviour: tap grip OR tap a tab opens it; tap grip again closes
+function setSheetOpen(open) {
+  mobileSheet.classList.toggle('open', open);
+}
+sheetGrip.addEventListener('click', () => {
+  setSheetOpen(!mobileSheet.classList.contains('open'));
+});
+
+// Drag-to-open / drag-to-close on the grip area
+let sheetDrag = null;
+sheetGrip.addEventListener('pointerdown', e => {
+  sheetDrag = { startY: e.clientY, wasOpen: mobileSheet.classList.contains('open'), moved: false };
+  sheetGrip.setPointerCapture(e.pointerId);
+});
+sheetGrip.addEventListener('pointermove', e => {
+  if (!sheetDrag) return;
+  const dy = e.clientY - sheetDrag.startY;
+  if (Math.abs(dy) > 6) sheetDrag.moved = true;
+  // Below threshold: dragging down -> close, dragging up -> open
+});
+sheetGrip.addEventListener('pointerup', e => {
+  if (!sheetDrag) return;
+  const dy = e.clientY - sheetDrag.startY;
+  if (sheetDrag.moved) {
+    if (dy < -30) setSheetOpen(true);
+    else if (dy > 30) setSheetOpen(false);
+    else setSheetOpen(sheetDrag.wasOpen);
+  }
+  // (if !moved, the click handler above already toggled)
+  try { sheetGrip.releasePointerCapture(e.pointerId); } catch(_) {}
+  sheetDrag = null;
+});
+
+// Tab switching (also opens sheet if collapsed)
+sheetTabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    sheetTabs.forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const which = tab.dataset.pane;
+    sheetPanes.forEach(p => p.classList.toggle('active', p.dataset.pane === which));
+    if (!mobileSheet.classList.contains('open')) setSheetOpen(true);
+  });
+});
+
+// Populate the mobile cloud select with same options
+const mCloudSelect = document.getElementById('m-cloud-select');
+CLOUD_KEYS.forEach(k => {
+  const opt = document.createElement('option');
+  opt.value = k;
+  opt.textContent = `${CLOUDS[k].abbr} — ${CLOUDS[k].name} (${CLOUDS[k].etage})`;
+  mCloudSelect.appendChild(opt);
+});
+
+// Two-way binding helper: mirror mobile control <-> desktop control
+function bindMirror(mobileEl, desktopEl, eventName = 'input') {
+  mobileEl.addEventListener(eventName, () => {
+    desktopEl.value = mobileEl.value;
+    desktopEl.dispatchEvent(new Event(eventName, { bubbles: true }));
+  });
+  desktopEl.addEventListener(eventName, () => {
+    if (mobileEl.value !== desktopEl.value) {
+      mobileEl.value = desktopEl.value;
+      // Reflect slider fill if applicable
+      if (mobileEl.type === 'range') {
+        const min = +mobileEl.min, max = +mobileEl.max;
+        const pct = ((+mobileEl.value - min) / (max - min)) * 100;
+        mobileEl.style.setProperty('--val', `${pct}%`);
+      }
+    }
+  });
+}
+
+bindMirror(mCloudSelect, cloudSelect, 'change');
+bindMirror(document.getElementById('m-tod-slider'), todSlider);
+bindMirror(document.getElementById('m-wind-slider'), windSlider);
+bindMirror(document.getElementById('m-dir-slider'), dirSlider);
+bindMirror(document.getElementById('m-den-slider'), denSlider);
+
+// Mobile slider value labels
+function bindLabel(slider, label, fmt) {
+  const update = () => { label.textContent = fmt(+slider.value); };
+  slider.addEventListener('input', update);
+  // initial paint
+  update();
+  // Also update slider fill on input
+  slider.addEventListener('input', () => {
+    const min = +slider.min, max = +slider.max;
+    const pct = ((+slider.value - min) / (max - min)) * 100;
+    slider.style.setProperty('--val', `${pct}%`);
+  });
+  // initial fill
+  const min = +slider.min, max = +slider.max;
+  const pct = ((+slider.value - min) / (max - min)) * 100;
+  slider.style.setProperty('--val', `${pct}%`);
+}
+bindLabel(document.getElementById('m-tod-slider'), document.getElementById('m-tod-val'), v => fmtTime(v));
+bindLabel(document.getElementById('m-wind-slider'), document.getElementById('m-wind-val'), v => `${v} kt`);
+bindLabel(document.getElementById('m-dir-slider'), document.getElementById('m-dir-val'), v => `${String(v).padStart(3,'0')}°`);
+bindLabel(document.getElementById('m-den-slider'), document.getElementById('m-den-val'), v => `${v}%`);
+
+// Mobile buttons
+document.getElementById('m-btn-randomize').addEventListener('click', () => {
+  document.getElementById('btn-randomize').click();
+});
+document.getElementById('m-btn-quiz').addEventListener('click', () => {
+  document.getElementById('btn-quiz').click();
+});
+
+// Mirror peek bar + mobile info pane whenever cloud changes
+const peekAbbr = document.getElementById('peek-abbr');
+const peekName = document.getElementById('peek-name');
+const peekFL = document.getElementById('peek-fl');
+const mInfoBody = document.getElementById('m-info-body');
+const desktopInfoCard = document.getElementById('info-card');
+
+// Hook into the existing setCloud flow by observing the cloud-select change
+// (cloudSelect already triggers setCloud which calls updateInfoCard)
+// We mirror after each change
+function syncMobileInfo() {
+  const key = cloudSelect.value;
+  if (!key || !CLOUDS[key]) return;
+  const def = CLOUDS[key];
+  peekAbbr.textContent = def.abbr;
+  peekName.textContent = def.name;
+  const flMin = String(Math.round(def.altMin_ft / 100)).padStart(3, '0');
+  const flMax = String(Math.round(def.altMax_ft / 100)).padStart(3, '0');
+  peekFL.textContent = `FL${flMin}–FL${flMax}`;
+  // Clone info card content into mobile pane
+  mInfoBody.innerHTML = desktopInfoCard.innerHTML;
+}
+// Run after each cloud change (cloudSelect change → setCloud → updateInfoCard, then sync)
+cloudSelect.addEventListener('change', () => setTimeout(syncMobileInfo, 0));
+// Also after randomize
+document.getElementById('btn-randomize').addEventListener('click', () => setTimeout(syncMobileInfo, 0));
+
+/* =====================================================
    11. KICKOFF
    ===================================================== */
+setTimeOfDay(14); // 14:00 — clear afternoon sky
 setCloud('Cu'); // start with friendly Cumulus
+syncMobileInfo();
 animate();
 
 // Hide splash after first frame
