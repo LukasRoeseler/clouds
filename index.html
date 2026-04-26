@@ -1,1 +1,1857 @@
 
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CloudGen — Procedural Cloud Atlas (WMO)</title>
+<style>
+  /* ---------- AVIATION DASHBOARD THEME ---------- */
+  :root {
+    --bg-0: #05080d;
+    --bg-1: #0a1119;
+    --bg-2: #111b27;
+    --bg-3: #18263a;
+    --line: #1f3550;
+    --line-2: #2a4870;
+    --txt: #d8e4f0;
+    --txt-dim: #7e94ad;
+    --txt-mute: #4f6885;
+    --accent: #00d2ff;
+    --accent-2: #00ffae;
+    --warn: #ffb347;
+    --danger: #ff5c5c;
+    --ok: #4ade80;
+    --shadow: 0 8px 28px rgba(0,0,0,0.55);
+    --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+    --sans: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg-0);
+    color: var(--txt);
+    font-family: var(--sans);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    position: relative;
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Canvas (Three.js) */
+  #scene-canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    display: block;
+    background:
+      radial-gradient(ellipse at 50% 110%, #1a2942 0%, #0a121e 45%, #05080d 100%);
+  }
+
+  /* HUD top bar */
+  .hud-top {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    background: linear-gradient(180deg, rgba(5,8,13,0.92), rgba(5,8,13,0.55) 70%, transparent);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid rgba(31, 53, 80, 0.6);
+    z-index: 20;
+    pointer-events: none;
+  }
+  .hud-top .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--mono);
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    font-size: 13px;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  .hud-top .brand .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent-2);
+    box-shadow: 0 0 12px var(--accent-2);
+    animation: pulse 1.6s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.35 } }
+
+  .hud-top .meta {
+    display: flex; gap: 22px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--txt-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .hud-top .meta b { color: var(--txt); font-weight: 500; }
+
+  /* Side panel: controls */
+  .panel {
+    position: absolute;
+    top: 70px;
+    left: 14px;
+    width: 320px;
+    max-height: calc(100vh - 86px);
+    overflow-y: auto;
+    background: linear-gradient(180deg, rgba(10,17,25,0.92), rgba(10,17,25,0.78));
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 16px 18px 16px;
+    box-shadow: var(--shadow);
+    z-index: 15;
+    backdrop-filter: blur(8px);
+  }
+  .panel::-webkit-scrollbar { width: 6px; }
+  .panel::-webkit-scrollbar-track { background: transparent; }
+  .panel::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
+
+  .panel h2 {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--txt-dim);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel h2 .num {
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--txt-mute);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  /* Custom select */
+  .select-wrap {
+    position: relative;
+  }
+  select {
+    width: 100%;
+    appearance: none;
+    background: var(--bg-2);
+    color: var(--txt);
+    border: 1px solid var(--line-2);
+    border-radius: 6px;
+    padding: 9px 32px 9px 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  select:hover { border-color: var(--accent); background: var(--bg-3); }
+  select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0, 210, 255, 0.18); }
+  .select-wrap::after {
+    content: '▾';
+    position: absolute;
+    right: 10px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent);
+    pointer-events: none;
+    font-size: 11px;
+  }
+
+  /* Buttons */
+  .btn-row { display: flex; gap: 8px; }
+  button {
+    flex: 1;
+    background: var(--bg-2);
+    color: var(--txt);
+    border: 1px solid var(--line-2);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); background: var(--bg-3); }
+  button:active { transform: translateY(1px); }
+  button.primary {
+    background: linear-gradient(180deg, #006d8a, #004f66);
+    border-color: var(--accent);
+    color: #eaf9ff;
+  }
+  button.primary:hover { background: linear-gradient(180deg, #0091ba, #006d8a); color: #fff; }
+  button.danger { border-color: var(--danger); color: var(--danger); }
+  button.danger:hover { background: rgba(255, 92, 92, 0.12); }
+  button.success { border-color: var(--ok); color: var(--ok); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Slider */
+  input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    background: transparent;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent) var(--val,50%), var(--bg-3) var(--val,50%), var(--bg-3) 100%);
+    border-radius: 2px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    background: #fff;
+    border: 2px solid var(--accent);
+    border-radius: 50%;
+    margin-top: -5px;
+    box-shadow: 0 0 8px rgba(0, 210, 255, 0.6);
+  }
+  input[type="range"]::-moz-range-track {
+    height: 4px;
+    background: var(--bg-3);
+    border-radius: 2px;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px;
+    background: #fff;
+    border: 2px solid var(--accent);
+    border-radius: 50%;
+  }
+  .slider-val {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    float: right;
+  }
+
+  /* Info card */
+  .info-card {
+    position: absolute;
+    top: 70px;
+    right: 14px;
+    width: 320px;
+    background: linear-gradient(180deg, rgba(10,17,25,0.92), rgba(10,17,25,0.78));
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+    z-index: 15;
+    backdrop-filter: blur(8px);
+    max-height: calc(100vh - 86px);
+    overflow-y: auto;
+  }
+  .info-card::-webkit-scrollbar { width: 6px; }
+  .info-card::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
+
+  .cloud-title {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .cloud-title .abbr {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+  .cloud-title .etage {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--txt-mute);
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
+  }
+  .cloud-name {
+    font-size: 13px;
+    color: var(--txt);
+    margin-bottom: 14px;
+    font-style: italic;
+  }
+  .cloud-desc {
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--txt-dim);
+    margin-bottom: 14px;
+  }
+
+  /* Stat blocks */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .stat {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .stat .lbl {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--txt-mute);
+    text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+  .stat .val {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--txt);
+    font-weight: 600;
+  }
+  .stat .val.accent { color: var(--accent); }
+  .stat .val.warn { color: var(--warn); }
+  .stat .val.danger { color: var(--danger); }
+  .stat .val.ok { color: var(--ok); }
+
+  .hazard-row {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .hazard {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid;
+  }
+  .hazard.low { color: var(--ok); border-color: rgba(74, 222, 128, 0.4); background: rgba(74, 222, 128, 0.08); }
+  .hazard.mod { color: var(--warn); border-color: rgba(255, 179, 71, 0.4); background: rgba(255, 179, 71, 0.08); }
+  .hazard.high { color: var(--danger); border-color: rgba(255, 92, 92, 0.4); background: rgba(255, 92, 92, 0.08); }
+
+  /* Quiz overlay */
+  .quiz-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(5, 8, 13, 0.92);
+    backdrop-filter: blur(10px);
+    z-index: 50;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .quiz-overlay.active { display: flex; }
+
+  .quiz-modal {
+    width: min(900px, 100%);
+    max-height: 92vh;
+    background: linear-gradient(180deg, var(--bg-1), var(--bg-0));
+    border: 1px solid var(--line-2);
+    border-radius: 14px;
+    padding: 24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+    overflow-y: auto;
+  }
+  .quiz-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .quiz-header h2 {
+    font-family: var(--mono);
+    font-size: 14px;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  .quiz-header .close-btn {
+    background: transparent;
+    border: 1px solid var(--line-2);
+    color: var(--txt-dim);
+    font-size: 16px;
+    width: 32px; height: 32px;
+    flex: none;
+    padding: 0;
+    line-height: 1;
+  }
+  .quiz-header .close-btn:hover { color: var(--danger); border-color: var(--danger); background: transparent; }
+
+  .quiz-progress {
+    display: flex; justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--txt-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 8px;
+  }
+  .quiz-progress span { color: var(--txt); }
+  .quiz-progress .score { color: var(--accent-2); }
+
+  .progress-bar {
+    height: 4px;
+    background: var(--bg-3);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .progress-bar .fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width 0.4s ease;
+  }
+
+  .quiz-canvas-wrap {
+    position: relative;
+    height: 320px;
+    background: radial-gradient(ellipse at 50% 90%, #1a2942 0%, #0a121e 60%, #05080d 100%);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 18px;
+  }
+  #quiz-canvas { display: block; width: 100%; height: 100%; }
+
+  .quiz-question {
+    font-size: 14px;
+    color: var(--txt-dim);
+    margin-bottom: 12px;
+    text-align: center;
+    font-family: var(--mono);
+    letter-spacing: 0.05em;
+  }
+
+  .quiz-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .quiz-option {
+    background: var(--bg-2);
+    border: 1px solid var(--line-2);
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .quiz-option:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--bg-3);
+    transform: translateY(-1px);
+  }
+  .quiz-option .opt-abbr {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+  .quiz-option .opt-name {
+    font-size: 12px;
+    color: var(--txt-dim);
+    font-style: italic;
+  }
+  .quiz-option.correct {
+    border-color: var(--ok);
+    background: rgba(74, 222, 128, 0.12);
+    color: var(--ok);
+  }
+  .quiz-option.correct .opt-abbr { color: var(--ok); }
+  .quiz-option.wrong {
+    border-color: var(--danger);
+    background: rgba(255, 92, 92, 0.12);
+  }
+  .quiz-option.wrong .opt-abbr { color: var(--danger); }
+  .quiz-option:disabled { cursor: default; }
+
+  /* Result dashboard */
+  .result-dash {
+    text-align: center;
+    padding: 10px 0;
+  }
+  .result-dash .grade {
+    font-family: var(--mono);
+    font-size: 80px;
+    font-weight: 700;
+    line-height: 1;
+    margin: 10px 0;
+    background: linear-gradient(180deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .result-dash .grade.poor { background: linear-gradient(180deg, var(--warn), var(--danger)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .result-dash .summary {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--txt-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin-bottom: 24px;
+  }
+  .result-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .result-stats .stat {
+    padding: 14px;
+    text-align: center;
+  }
+  .result-stats .stat .val { font-size: 22px; }
+
+  .result-list {
+    text-align: left;
+    margin-bottom: 24px;
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px;
+    background: var(--bg-1);
+  }
+  .result-list::-webkit-scrollbar { width: 6px; }
+  .result-list::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
+  .result-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    border-bottom: 1px solid rgba(31, 53, 80, 0.4);
+  }
+  .result-row:last-child { border-bottom: none; }
+  .result-row .num { color: var(--txt-mute); width: 22px; }
+  .result-row .icon { width: 14px; }
+  .result-row .icon.ok { color: var(--ok); }
+  .result-row .icon.bad { color: var(--danger); }
+  .result-row .corr { color: var(--txt); flex: 1; }
+  .result-row .ans { color: var(--txt-dim); }
+  .result-row .ans.bad { color: var(--danger); }
+
+  /* Splash overlay (loading) */
+  .splash {
+    position: absolute;
+    inset: 0;
+    background: var(--bg-0);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+    transition: opacity 0.5s;
+  }
+  .splash.hide { opacity: 0; pointer-events: none; }
+  .splash .ring {
+    width: 50px; height: 50px;
+    border: 2px solid var(--line);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Compass */
+  .compass {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    width: 90px; height: 90px;
+    border-radius: 50%;
+    border: 1px solid var(--line-2);
+    background: rgba(10, 17, 25, 0.85);
+    z-index: 10;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(6px);
+    pointer-events: none;
+  }
+  .compass .needle {
+    position: absolute;
+    width: 2px; height: 38px;
+    background: linear-gradient(180deg, var(--danger) 0%, var(--danger) 50%, #fff 50%, #fff 100%);
+    transform-origin: center center;
+    border-radius: 2px;
+  }
+  .compass .lbl {
+    position: absolute;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--txt-dim);
+    letter-spacing: 0.1em;
+  }
+  .compass .lbl.n { top: 4px; color: var(--danger); font-weight: 700; }
+  .compass .lbl.s { bottom: 4px; }
+  .compass .lbl.e { right: 6px; }
+  .compass .lbl.w { left: 6px; }
+
+  /* Mobile/tablet */
+  @media (max-width: 900px) {
+    .hud-top .meta { display: none; }
+    .panel { width: calc(100% - 28px); max-width: 360px; max-height: 40vh; }
+    .info-card {
+      width: calc(100% - 28px); max-width: 360px;
+      top: auto;
+      bottom: 14px;
+      right: 14px;
+      max-height: 40vh;
+    }
+    .compass { display: none; }
+    .quiz-options { grid-template-columns: 1fr; }
+    .result-stats { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    .panel, .info-card { width: calc(100% - 20px); max-width: none; left: 10px; right: 10px; }
+    .info-card { display: none; }
+    .panel.collapsed .panel-body { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Splash -->
+  <div class="splash" id="splash"><div class="ring"></div></div>
+
+  <!-- 3D Canvas -->
+  <canvas id="scene-canvas"></canvas>
+
+  <!-- HUD top bar -->
+  <header class="hud-top">
+    <div class="brand">
+      <span class="dot"></span>
+      <span>CloudGen / WMO Atlas v1.0</span>
+    </div>
+    <div class="meta">
+      <div>UTC <b id="utc-time">--:--:--</b></div>
+      <div>FPS <b id="fps">--</b></div>
+      <div>QNH <b>1013</b> hPa</div>
+      <div>OAT <b id="oat">--</b>°C</div>
+    </div>
+  </header>
+
+  <!-- Control panel (left) -->
+  <aside class="panel">
+    <h2><span class="num">01</span> Cloud Selection</h2>
+
+    <div class="field">
+      <label>Genus (WMO)</label>
+      <div class="select-wrap">
+        <select id="cloud-select"></select>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin-bottom: 6px;">
+      <button id="btn-randomize" class="primary">⟳ Randomize</button>
+    </div>
+
+    <h2 style="margin-top:18px;"><span class="num">02</span> Atmosphere</h2>
+
+    <div class="field">
+      <label>Wind Speed <span class="slider-val" id="wind-val">15 kt</span></label>
+      <input type="range" id="wind-slider" min="0" max="120" value="15" step="1" />
+    </div>
+
+    <div class="field">
+      <label>Wind Direction <span class="slider-val" id="dir-val">270°</span></label>
+      <input type="range" id="dir-slider" min="0" max="359" value="270" step="1" />
+    </div>
+
+    <div class="field">
+      <label>Density <span class="slider-val" id="den-val">100%</span></label>
+      <input type="range" id="den-slider" min="20" max="150" value="100" step="5" />
+    </div>
+
+    <h2 style="margin-top:18px;"><span class="num">03</span> Training</h2>
+    <div class="btn-row">
+      <button id="btn-quiz" class="success">▶ Cloud Quiz</button>
+    </div>
+    <p style="font-size:11px; color: var(--txt-mute); margin-top: 8px; line-height:1.5; font-family: var(--mono); letter-spacing:0.03em;">
+      20 rounds. Identify the WMO genus from procedural visualization.
+    </p>
+  </aside>
+
+  <!-- Info card (right) -->
+  <aside class="info-card" id="info-card">
+    <!-- populated by JS -->
+  </aside>
+
+  <!-- Compass -->
+  <div class="compass">
+    <div class="needle" id="compass-needle"></div>
+    <span class="lbl n">N</span>
+    <span class="lbl e">E</span>
+    <span class="lbl s">S</span>
+    <span class="lbl w">W</span>
+  </div>
+
+  <!-- Quiz overlay -->
+  <div class="quiz-overlay" id="quiz-overlay">
+    <div class="quiz-modal" id="quiz-modal">
+      <!-- populated by JS -->
+    </div>
+  </div>
+
+</div>
+
+<!-- Three.js via CDN (importmap) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* =====================================================
+   1. WMO CLOUD DATABASE (10 GENERA)
+   ===================================================== */
+const CLOUDS = {
+  Ci: {
+    abbr: 'Ci', name: 'Cirrus', etage: 'High',
+    altMin_ft: 16500, altMax_ft: 45000, // ~5–13.5 km
+    desc: 'Detached, fibrous, hair-like clouds composed entirely of ice crystals. Often the first sign of an approaching warm front.',
+    color: [255, 255, 255], opacity: 0.32,
+    particles: 75, scale: [40, 8, 28], spread: [180, 6, 70],
+    noiseFreq: 0.018, noiseContrast: 1.6, fibrous: true,
+    icing: 'low', turbulence: 'low', visibility: 'good',
+    flightTip: 'Generally safe, but indicates incoming weather. Possible CAT (Clear Air Turbulence) near jet streams.'
+  },
+  Cc: {
+    abbr: 'Cc', name: 'Cirrocumulus', etage: 'High',
+    altMin_ft: 16500, altMax_ft: 40000,
+    desc: 'Thin, white patches of cloud composed of small grains, often arranged in regular ripples (mackerel sky).',
+    color: [248, 250, 255], opacity: 0.45,
+    particles: 140, scale: [9, 4, 9], spread: [120, 4, 60], grid: true,
+    noiseFreq: 0.05, noiseContrast: 1.2,
+    icing: 'low', turbulence: 'low', visibility: 'good',
+    flightTip: 'Indicates instability at high altitudes. Often precedes deteriorating weather within 24h.'
+  },
+  Cs: {
+    abbr: 'Cs', name: 'Cirrostratus', etage: 'High',
+    altMin_ft: 16500, altMax_ft: 45000,
+    desc: 'Transparent whitish veil of cloud covering large parts of the sky, often producing halo phenomena around sun or moon.',
+    color: [240, 245, 255], opacity: 0.22,
+    particles: 95, scale: [60, 4, 50], spread: [200, 4, 100],
+    noiseFreq: 0.012, noiseContrast: 1.0, sheet: true,
+    icing: 'low', turbulence: 'low', visibility: 'reduced',
+    flightTip: 'Sun halo (22°) is diagnostic. Often heralds an approaching frontal system within 12–24h.'
+  },
+  Ac: {
+    abbr: 'Ac', name: 'Altocumulus', etage: 'Middle',
+    altMin_ft: 6500, altMax_ft: 23000,
+    desc: 'White or grey patches of cloud, composed of laminae or rounded masses arranged in regular bands or layers.',
+    color: [220, 228, 240], opacity: 0.65,
+    particles: 130, scale: [14, 7, 14], spread: [140, 8, 80], grid: true,
+    noiseFreq: 0.04, noiseContrast: 1.4,
+    icing: 'mod', turbulence: 'mod', visibility: 'reduced',
+    flightTip: 'Castellanus variety indicates mid-level instability — risk of afternoon thunderstorms. Possible airframe icing.'
+  },
+  As: {
+    abbr: 'As', name: 'Altostratus', etage: 'Middle',
+    altMin_ft: 6500, altMax_ft: 23000,
+    desc: 'Greyish or bluish sheet of cloud covering large portions of sky, often thick enough to dim the sun. Light precipitation possible.',
+    color: [180, 190, 205], opacity: 0.75,
+    particles: 110, scale: [55, 6, 45], spread: [200, 8, 110],
+    noiseFreq: 0.014, noiseContrast: 0.9, sheet: true,
+    icing: 'mod', turbulence: 'mod', visibility: 'reduced',
+    flightTip: 'Continuous IFR conditions likely. Moderate icing in liquid layers between 0°C and -15°C.'
+  },
+  Ns: {
+    abbr: 'Ns', name: 'Nimbostratus', etage: 'Middle',
+    altMin_ft: 2000, altMax_ft: 18000, vertical: true,
+    desc: 'Dark, grey, often dense cloud layer producing continuous rain or snow. Diffuses light heavily; no shadows visible.',
+    color: [80, 88, 100], opacity: 0.92,
+    particles: 220, scale: [60, 18, 50], spread: [200, 22, 120],
+    noiseFreq: 0.008, noiseContrast: 0.7, sheet: true, dense: true,
+    icing: 'high', turbulence: 'mod', visibility: 'poor',
+    flightTip: 'Severe icing risk. Continuous precipitation. IFR mandatory. Avoid prolonged flight in liquid layers.'
+  },
+  Sc: {
+    abbr: 'Sc', name: 'Stratocumulus', etage: 'Low',
+    altMin_ft: 1200, altMax_ft: 6500,
+    desc: 'Grey or whitish patches, sheets or layers; almost always shows dark parts and rolls or rounded masses.',
+    color: [190, 200, 215], opacity: 0.75,
+    particles: 160, scale: [22, 9, 22], spread: [160, 10, 90], lumpy: true,
+    noiseFreq: 0.025, noiseContrast: 1.3,
+    icing: 'mod', turbulence: 'low', visibility: 'reduced',
+    flightTip: 'Common over coasts and lakes. Light icing possible. Smooth flight above; bumpy below cloud base.'
+  },
+  St: {
+    abbr: 'St', name: 'Stratus', etage: 'Low',
+    altMin_ft: 0, altMax_ft: 6500,
+    desc: 'Grey cloud layer with uniform base, may produce drizzle. Effectively a fog layer aloft when based above ground.',
+    color: [165, 175, 188], opacity: 0.85,
+    particles: 130, scale: [70, 4, 60], spread: [220, 5, 130],
+    noiseFreq: 0.01, noiseContrast: 0.6, sheet: true,
+    icing: 'low', turbulence: 'low', visibility: 'poor',
+    flightTip: 'CAT II/III approaches possible. Below freezing → freezing drizzle (severe icing on contact).'
+  },
+  Cu: {
+    abbr: 'Cu', name: 'Cumulus', etage: 'Low',
+    altMin_ft: 1500, altMax_ft: 18000, vertical: true,
+    desc: 'Detached clouds, generally dense with sharp outlines, developing vertically as rising mounds with cauliflower tops.',
+    color: [248, 250, 255], opacity: 0.95,
+    particles: 90, scale: [18, 14, 18], spread: [160, 16, 80], puffy: true,
+    noiseFreq: 0.022, noiseContrast: 1.8,
+    icing: 'mod', turbulence: 'mod', visibility: 'good',
+    flightTip: 'Fair-weather Cu (Cu humilis) → light bumps. Cu congestus → strong updrafts, possible CB development.'
+  },
+  Cb: {
+    abbr: 'Cb', name: 'Cumulonimbus', etage: 'Vertical', isCb: true,
+    altMin_ft: 1500, altMax_ft: 60000, vertical: true,
+    desc: 'Heavy, dense cloud with massive vertical extent, forming a mountain or anvil shape. Source of thunderstorms, hail, severe turbulence.',
+    color: [225, 230, 240], opacity: 0.98,
+    particles: 280, scale: [28, 22, 28], spread: [220, 70, 100], puffy: true, anvil: true,
+    noiseFreq: 0.018, noiseContrast: 2.0,
+    icing: 'high', turbulence: 'high', visibility: 'poor',
+    flightTip: 'AVOID. Severe turbulence, hail, lightning, microbursts. Min 20 NM lateral separation recommended (ICAO).'
+  }
+};
+
+const CLOUD_KEYS = Object.keys(CLOUDS);
+
+/* =====================================================
+   2. PROCEDURAL NOISE (Simplex-like via value noise)
+   ===================================================== */
+// Hash-based pseudo-random
+function hash2(x, y) {
+  let h = x * 374761393 + y * 668265263;
+  h = (h ^ (h >>> 13)) * 1274126177;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+function lerp(a, b, t) { return a + (b - a) * t; }
+function smooth(t) { return t * t * (3 - 2 * t); }
+
+function valueNoise2D(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = smooth(xf), v = smooth(yf);
+  const a = hash2(xi, yi);
+  const b = hash2(xi + 1, yi);
+  const c = hash2(xi, yi + 1);
+  const d = hash2(xi + 1, yi + 1);
+  return lerp(lerp(a, b, u), lerp(c, d, u), v);
+}
+
+function fbm2D(x, y, octaves = 5, lacunarity = 2.0, gain = 0.5) {
+  let amp = 1.0, freq = 1.0, sum = 0.0, norm = 0.0;
+  for (let i = 0; i < octaves; i++) {
+    sum += amp * valueNoise2D(x * freq, y * freq);
+    norm += amp;
+    amp *= gain;
+    freq *= lacunarity;
+  }
+  return sum / norm;
+}
+
+/* =====================================================
+   3. PROCEDURAL CLOUD TEXTURES (Canvas2D)
+   ===================================================== */
+const TEX_CACHE = new Map();
+
+function buildPuffTexture(opts = {}) {
+  // Single soft particle texture - one base for all clouds, density via opacity/distribution
+  const { size = 128, fibrous = false, dense = false, seed = 1 } = opts;
+  const key = `puff_${size}_${fibrous?1:0}_${dense?1:0}_${seed}`;
+  if (TEX_CACHE.has(key)) return TEX_CACHE.get(key);
+
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const data = img.data;
+  const cx = size / 2, cy = size / 2;
+  const radius = size / 2;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (x - cx) / radius;
+      const dy = (y - cy) / radius;
+      let r = Math.sqrt(dx * dx + dy * dy);
+
+      // Noise distortion of radius
+      const nx = x / size * 4 + seed * 17.3;
+      const ny = y / size * 4 + seed * 31.7;
+      let noise;
+      if (fibrous) {
+        // Stretched horizontal fibers
+        noise = fbm2D(nx * 6, ny * 0.5, 4);
+      } else {
+        noise = fbm2D(nx, ny, 5);
+      }
+
+      // Distort radial falloff with noise
+      const distortedR = r + (noise - 0.5) * 0.45;
+      let alpha = 1.0 - smooth(Math.min(1, Math.max(0, distortedR)));
+
+      // Detail multiplication
+      const detail = fbm2D(nx * 3, ny * 3, 4);
+      alpha *= 0.55 + 0.55 * detail;
+
+      if (fibrous) {
+        // Sharper falloff perpendicular to fiber
+        const fiberMask = Math.exp(-Math.pow(dy * 1.4, 2) * 3);
+        alpha *= fiberMask * (0.4 + 0.7 * detail);
+      }
+
+      if (dense) {
+        // Boost mid-densities, harder edges
+        alpha = Math.pow(alpha, 0.7);
+      }
+
+      alpha = Math.max(0, Math.min(1, alpha));
+
+      const i = (y * size + x) * 4;
+      data[i] = 255;
+      data[i + 1] = 255;
+      data[i + 2] = 255;
+      data[i + 3] = Math.floor(alpha * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  TEX_CACHE.set(key, tex);
+  return tex;
+}
+
+/* =====================================================
+   4. THREE.JS SCENE SETUP
+   ===================================================== */
+const sceneCanvas = document.getElementById('scene-canvas');
+
+const renderer = new THREE.WebGLRenderer({
+  canvas: sceneCanvas,
+  antialias: true,
+  alpha: true,
+  powerPreference: 'high-performance'
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0a121e, 0.0035);
+
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 2500);
+camera.position.set(0, 18, 220);
+camera.lookAt(0, 10, 0);
+
+// Ambient + directional sun light
+scene.add(new THREE.AmbientLight(0x6680a0, 0.65));
+const sun = new THREE.DirectionalLight(0xfff4d8, 1.1);
+sun.position.set(120, 180, 100);
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x3a5a80, 0.5);
+fill.position.set(-100, 60, -80);
+scene.add(fill);
+
+// Distant horizon plane (subtle)
+const horizonGeo = new THREE.PlaneGeometry(3000, 3000);
+const horizonMat = new THREE.MeshBasicMaterial({
+  color: 0x0a1320,
+  transparent: true,
+  opacity: 0.4,
+  side: THREE.DoubleSide,
+  depthWrite: false
+});
+const horizon = new THREE.Mesh(horizonGeo, horizonMat);
+horizon.rotation.x = -Math.PI / 2;
+horizon.position.y = -25;
+scene.add(horizon);
+
+// Subtle star/grid backdrop using points
+function makeStars() {
+  const count = 350;
+  const geo = new THREE.BufferGeometry();
+  const positions = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const r = 800 + Math.random() * 400;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(0.3 + Math.random() * 0.6); // upper hemisphere
+    positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+    positions[i * 3 + 1] = r * Math.cos(phi);
+    positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const mat = new THREE.PointsMaterial({
+    color: 0x6688aa,
+    size: 1.2,
+    sizeAttenuation: false,
+    transparent: true,
+    opacity: 0.4,
+    depthWrite: false
+  });
+  return new THREE.Points(geo, mat);
+}
+scene.add(makeStars());
+
+/* =====================================================
+   5. CLOUD BUILDER
+   ===================================================== */
+let currentCloudGroup = null;
+
+function disposeGroup(group) {
+  if (!group) return;
+  group.traverse(obj => {
+    if (obj.geometry) obj.geometry.dispose();
+    if (obj.material) {
+      if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+      else obj.material.dispose();
+    }
+  });
+  scene.remove(group);
+}
+
+function buildCloud(typeKey, densityMultiplier = 1.0) {
+  const def = CLOUDS[typeKey];
+  if (!def) return null;
+
+  disposeGroup(currentCloudGroup);
+
+  const group = new THREE.Group();
+  group.userData.type = typeKey;
+  group.userData.def = def;
+
+  const tex = buildPuffTexture({
+    size: 128,
+    fibrous: !!def.fibrous,
+    dense: !!def.dense,
+    seed: typeKey.charCodeAt(0) + typeKey.charCodeAt(1)
+  });
+
+  const baseColor = new THREE.Color(def.color[0]/255, def.color[1]/255, def.color[2]/255);
+
+  const partCount = Math.round(def.particles * densityMultiplier);
+
+  // Build each puff as a sprite-like billboard for efficient rendering
+  // We use individual meshes (PlaneGeometry + ShaderMaterial billboarding)
+  // For simplicity & performance: use Sprite
+
+  const baseHeight = etageBaseHeight(def);
+
+  for (let i = 0; i < partCount; i++) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex,
+      color: baseColor,
+      transparent: true,
+      opacity: def.opacity,
+      depthWrite: false,
+      depthTest: true,
+      blending: THREE.NormalBlending,
+      fog: true
+    }));
+
+    let px, py, pz, sx, sy;
+    const [spreadX, spreadY, spreadZ] = def.spread;
+    const [scaleX, scaleY, scaleZ] = def.scale;
+
+    if (def.isCb) {
+      // CB: tower base + anvil at top
+      const t = i / partCount;
+      if (t < 0.55) {
+        // Tower (vertical cylinder, expanding upward)
+        const towerH = t / 0.55; // 0..1
+        const ang = Math.random() * Math.PI * 2;
+        const radius = (8 + towerH * 26) * (0.6 + Math.random() * 0.5);
+        px = Math.cos(ang) * radius;
+        pz = Math.sin(ang) * radius;
+        py = baseHeight + towerH * 70 + (Math.random() - 0.5) * 8;
+        const s = scaleX * (0.85 + Math.random() * 0.6);
+        sx = s; sy = s * (0.85 + Math.random() * 0.4);
+      } else {
+        // Anvil (wide flat top)
+        const anvilT = (t - 0.55) / 0.45;
+        const ang = Math.random() * Math.PI * 2;
+        const radius = 30 + anvilT * 90 + Math.random() * 18;
+        px = Math.cos(ang) * radius;
+        pz = Math.sin(ang) * radius;
+        py = baseHeight + 70 + Math.random() * 14 - anvilT * 4;
+        const s = scaleX * (1.4 + Math.random() * 0.8);
+        sx = s * 1.3; sy = s * 0.7;
+      }
+    } else if (def.puffy) {
+      // CU: clustered cauliflower - few centers with surrounding puffs
+      const clusterCount = 4;
+      const clusterIdx = i % clusterCount;
+      const clusterAng = (clusterIdx / clusterCount) * Math.PI * 2;
+      const clusterRad = 35 + clusterIdx * 12;
+      const ccx = Math.cos(clusterAng) * clusterRad;
+      const ccz = Math.sin(clusterAng) * clusterRad;
+
+      // Local position around cluster
+      const lr = Math.pow(Math.random(), 0.6) * 18;
+      const la = Math.random() * Math.PI * 2;
+      px = ccx + Math.cos(la) * lr;
+      pz = ccz + Math.sin(la) * lr;
+      // Vertical bias upward (cauliflower top)
+      py = baseHeight + Math.pow(Math.random(), 1.5) * scaleY * 1.4 + Math.random() * 4;
+      const s = scaleX * (0.7 + Math.random() * 0.7);
+      sx = s; sy = s;
+    } else if (def.grid) {
+      // Cc / Ac: regularly arranged ripples
+      const cols = Math.ceil(Math.sqrt(partCount));
+      const ix = i % cols;
+      const iz = Math.floor(i / cols);
+      const colsZ = Math.ceil(partCount / cols);
+      const stepX = spreadX / cols;
+      const stepZ = spreadZ / colsZ;
+      px = (ix - cols / 2) * stepX + (Math.random() - 0.5) * stepX * 0.4;
+      pz = (iz - colsZ / 2) * stepZ + (Math.random() - 0.5) * stepZ * 0.4;
+      py = baseHeight + (Math.random() - 0.5) * spreadY;
+      const s = scaleX * (0.7 + Math.random() * 0.5);
+      sx = s; sy = s * (def.abbr === 'Cc' ? 0.7 : 0.85);
+    } else if (def.fibrous) {
+      // Cirrus: long horizontal streaks
+      px = (Math.random() - 0.5) * spreadX;
+      pz = (Math.random() - 0.5) * spreadZ;
+      py = baseHeight + (Math.random() - 0.5) * spreadY;
+      const s = scaleX * (0.8 + Math.random() * 0.7);
+      sx = s; sy = scaleY * (0.8 + Math.random() * 0.5);
+    } else if (def.sheet) {
+      // Stratus / As / Cs / Ns: flat sheet
+      px = (Math.random() - 0.5) * spreadX;
+      pz = (Math.random() - 0.5) * spreadZ;
+      py = baseHeight + (Math.random() - 0.5) * spreadY;
+      const s = scaleX * (0.8 + Math.random() * 0.5);
+      sx = s; sy = scaleY * (1.0 + Math.random() * 0.6);
+    } else if (def.lumpy) {
+      // Sc: rolls / lumps in patches
+      const ang = Math.random() * Math.PI * 2;
+      const rad = Math.pow(Math.random(), 0.65) * spreadX * 0.5;
+      px = Math.cos(ang) * rad;
+      pz = Math.sin(ang) * rad;
+      py = baseHeight + (Math.random() - 0.5) * spreadY;
+      const s = scaleX * (0.7 + Math.random() * 0.6);
+      sx = s; sy = s * (0.7 + Math.random() * 0.4);
+    } else {
+      // Default scatter
+      px = (Math.random() - 0.5) * spreadX;
+      pz = (Math.random() - 0.5) * spreadZ;
+      py = baseHeight + (Math.random() - 0.5) * spreadY;
+      const s = scaleX * (0.8 + Math.random() * 0.5);
+      sx = s; sy = scaleY * (0.8 + Math.random() * 0.5);
+    }
+
+    sprite.position.set(px, py, pz);
+    sprite.scale.set(sx, sy, 1);
+    // Subtle per-particle color variation
+    const shade = 0.85 + Math.random() * 0.18;
+    sprite.material.color.setRGB(baseColor.r * shade, baseColor.g * shade, baseColor.b * shade);
+
+    // Store metadata for animation
+    sprite.userData.driftX = (Math.random() - 0.5) * 0.2;
+    sprite.userData.driftZ = (Math.random() - 0.5) * 0.2;
+    sprite.userData.bobPhase = Math.random() * Math.PI * 2;
+    sprite.userData.bobAmp = 0.05 + Math.random() * 0.15;
+    sprite.userData.basePos = sprite.position.clone();
+
+    group.add(sprite);
+  }
+
+  // CB extra: dark base shadow particles
+  if (def.isCb) {
+    const darkTex = buildPuffTexture({ size: 128, dense: true, seed: 99 });
+    for (let i = 0; i < 40; i++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: darkTex,
+        color: new THREE.Color(0x202830),
+        transparent: true,
+        opacity: 0.55,
+        depthWrite: false,
+        depthTest: true,
+        fog: true
+      }));
+      const ang = Math.random() * Math.PI * 2;
+      const rad = Math.random() * 28;
+      sprite.position.set(Math.cos(ang) * rad, baseHeight - 5 + Math.random() * 6, Math.sin(ang) * rad);
+      const s = 26 + Math.random() * 16;
+      sprite.scale.set(s, s * 0.8, 1);
+      sprite.userData.driftX = (Math.random() - 0.5) * 0.15;
+      sprite.userData.driftZ = (Math.random() - 0.5) * 0.15;
+      sprite.userData.bobPhase = Math.random() * Math.PI * 2;
+      sprite.userData.bobAmp = 0.05;
+      sprite.userData.basePos = sprite.position.clone();
+      group.add(sprite);
+    }
+  }
+
+  scene.add(group);
+  currentCloudGroup = group;
+  return group;
+}
+
+function etageBaseHeight(def) {
+  // Visual offset by etage for compositional distinction
+  if (def.etage === 'High') return 60;
+  if (def.etage === 'Middle') return 25;
+  if (def.etage === 'Low') return -2;
+  if (def.etage === 'Vertical') return -5; // CB starts low
+  return 0;
+}
+
+/* =====================================================
+   6. ANIMATION & WIND
+   ===================================================== */
+let windSpeed = 15; // knots
+let windDir = 270; // degrees
+let densityMult = 1.0;
+
+const clock = new THREE.Clock();
+let frame = 0;
+let lastFpsUpdate = 0;
+let fpsCount = 0;
+const fpsEl = document.getElementById('fps');
+
+function animate() {
+  const dt = Math.min(clock.getDelta(), 0.1);
+  const elapsed = clock.elapsedTime;
+  frame++;
+  fpsCount++;
+
+  // Wind vector in scene (normalize: dir 0 = north = -Z, 90 = east = +X)
+  const dirRad = (windDir + 180) * Math.PI / 180; // wind FROM dir → moves TO opposite
+  const windVx = Math.sin(dirRad) * (windSpeed * 0.05);
+  const windVz = -Math.cos(dirRad) * (windSpeed * 0.05);
+
+  if (currentCloudGroup) {
+    currentCloudGroup.children.forEach(sprite => {
+      // Drift with wind
+      sprite.position.x += windVx * dt + sprite.userData.driftX * dt * 0.4;
+      sprite.position.z += windVz * dt + sprite.userData.driftZ * dt * 0.4;
+      // Subtle vertical bob
+      sprite.position.y = sprite.userData.basePos.y + Math.sin(elapsed * 0.5 + sprite.userData.bobPhase) * sprite.userData.bobAmp;
+
+      // Wrap if drifted too far
+      const wrap = 250;
+      if (sprite.position.x > wrap) { sprite.position.x -= wrap * 2; sprite.userData.basePos.x -= wrap * 2; }
+      if (sprite.position.x < -wrap) { sprite.position.x += wrap * 2; sprite.userData.basePos.x += wrap * 2; }
+      if (sprite.position.z > wrap) { sprite.position.z -= wrap * 2; sprite.userData.basePos.z -= wrap * 2; }
+      if (sprite.position.z < -wrap) { sprite.position.z += wrap * 2; sprite.userData.basePos.z += wrap * 2; }
+    });
+
+    // Slow camera orbit for visual interest
+    const orbitSpeed = 0.04;
+    const orbitR = 220;
+    const cx = Math.sin(elapsed * orbitSpeed) * orbitR;
+    const cz = Math.cos(elapsed * orbitSpeed) * orbitR;
+    camera.position.x = cx;
+    camera.position.z = cz;
+    camera.position.y = 18 + Math.sin(elapsed * 0.2) * 4;
+    camera.lookAt(0, etageBaseHeight(currentCloudGroup.userData.def) * 0.4, 0);
+
+    // Update compass
+    const compassAngle = (elapsed * orbitSpeed * 180 / Math.PI) % 360;
+    const needle = document.getElementById('compass-needle');
+    if (needle) needle.style.transform = `rotate(${compassAngle}deg)`;
+  }
+
+  renderer.render(scene, camera);
+
+  // FPS update once per second
+  if (elapsed - lastFpsUpdate > 1) {
+    fpsEl.textContent = Math.round(fpsCount / (elapsed - lastFpsUpdate));
+    fpsCount = 0;
+    lastFpsUpdate = elapsed;
+  }
+
+  requestAnimationFrame(animate);
+}
+
+/* =====================================================
+   7. UI BINDINGS
+   ===================================================== */
+const cloudSelect = document.getElementById('cloud-select');
+CLOUD_KEYS.forEach(k => {
+  const opt = document.createElement('option');
+  opt.value = k;
+  opt.textContent = `${CLOUDS[k].abbr} — ${CLOUDS[k].name} (${CLOUDS[k].etage})`;
+  cloudSelect.appendChild(opt);
+});
+
+function updateInfoCard(typeKey) {
+  const def = CLOUDS[typeKey];
+  const card = document.getElementById('info-card');
+
+  const flMin = Math.round(def.altMin_ft / 100);
+  const flMax = Math.round(def.altMax_ft / 100);
+  const altMinKm = (def.altMin_ft * 0.3048 / 1000).toFixed(1);
+  const altMaxKm = (def.altMax_ft * 0.3048 / 1000).toFixed(1);
+
+  const tempEst = estimateTemp(def.altMax_ft);
+  document.getElementById('oat').textContent = tempEst > 0 ? `+${tempEst}` : tempEst;
+
+  const hazClass = lvl => lvl === 'high' ? 'high' : lvl === 'mod' ? 'mod' : 'low';
+  const hazLabel = lvl => lvl === 'high' ? 'HIGH' : lvl === 'mod' ? 'MOD' : 'LOW';
+
+  card.innerHTML = `
+    <div class="cloud-title">
+      <span class="abbr">${def.abbr}</span>
+      <span class="etage">${def.etage} Étage</span>
+    </div>
+    <div class="cloud-name">${def.name}</div>
+    <div class="cloud-desc">${def.desc}</div>
+
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="lbl">Flight Level</div>
+        <div class="val accent">FL${String(flMin).padStart(3,'0')}–FL${String(flMax).padStart(3,'0')}</div>
+      </div>
+      <div class="stat">
+        <div class="lbl">Altitude</div>
+        <div class="val">${altMinKm}–${altMaxKm} km</div>
+      </div>
+      <div class="stat">
+        <div class="lbl">Cloud Top OAT</div>
+        <div class="val ${tempEst < -20 ? 'accent' : ''}">${tempEst > 0 ? '+' : ''}${tempEst} °C</div>
+      </div>
+      <div class="stat">
+        <div class="lbl">Composition</div>
+        <div class="val">${composition(def)}</div>
+      </div>
+    </div>
+
+    <div class="stat" style="margin-bottom: 10px;">
+      <div class="lbl">Hazard Profile</div>
+      <div class="hazard-row" style="margin-top: 6px; margin-bottom:0;">
+        <span class="hazard ${hazClass(def.icing)}">Icing ${hazLabel(def.icing)}</span>
+        <span class="hazard ${hazClass(def.turbulence)}">Turb ${hazLabel(def.turbulence)}</span>
+        <span class="hazard ${hazClass(def.visibility === 'poor' ? 'high' : def.visibility === 'reduced' ? 'mod' : 'low')}">Vis ${def.visibility.toUpperCase()}</span>
+      </div>
+    </div>
+
+    <div class="stat">
+      <div class="lbl">Pilot Brief</div>
+      <div style="font-size: 12px; line-height:1.55; color: var(--txt); margin-top:6px;">
+        ${def.flightTip}
+      </div>
+    </div>
+  `;
+}
+
+function composition(def) {
+  if (def.etage === 'High') return 'Ice crystals';
+  if (def.abbr === 'Cb' || def.abbr === 'Ns') return 'Mixed phase';
+  if (def.etage === 'Middle') return 'Water + ice';
+  return 'Water droplets';
+}
+
+function estimateTemp(ft) {
+  // ISA: 15°C at sea level, lapse 1.98°C / 1000 ft, isothermal -56.5 above ~36k
+  const trop = 36000;
+  if (ft <= trop) return Math.round(15 - (ft / 1000) * 1.98);
+  return -57;
+}
+
+function setCloud(key) {
+  cloudSelect.value = key;
+  buildCloud(key, densityMult);
+  updateInfoCard(key);
+}
+
+cloudSelect.addEventListener('change', e => setCloud(e.target.value));
+
+document.getElementById('btn-randomize').addEventListener('click', () => {
+  let next;
+  do {
+    next = CLOUD_KEYS[Math.floor(Math.random() * CLOUD_KEYS.length)];
+  } while (next === cloudSelect.value && CLOUD_KEYS.length > 1);
+  setCloud(next);
+});
+
+const windSlider = document.getElementById('wind-slider');
+const windVal = document.getElementById('wind-val');
+windSlider.addEventListener('input', e => {
+  windSpeed = +e.target.value;
+  windVal.textContent = `${windSpeed} kt`;
+  e.target.style.setProperty('--val', `${(windSpeed / 120) * 100}%`);
+});
+windSlider.style.setProperty('--val', `${(15/120)*100}%`);
+
+const dirSlider = document.getElementById('dir-slider');
+const dirVal = document.getElementById('dir-val');
+dirSlider.addEventListener('input', e => {
+  windDir = +e.target.value;
+  dirVal.textContent = `${String(windDir).padStart(3,'0')}°`;
+  e.target.style.setProperty('--val', `${(windDir / 359) * 100}%`);
+});
+dirSlider.style.setProperty('--val', `${(270/359)*100}%`);
+
+const denSlider = document.getElementById('den-slider');
+const denVal = document.getElementById('den-val');
+denSlider.addEventListener('input', e => {
+  densityMult = +e.target.value / 100;
+  denVal.textContent = `${e.target.value}%`;
+  e.target.style.setProperty('--val', `${((+e.target.value - 20) / 130) * 100}%`);
+  buildCloud(cloudSelect.value, densityMult);
+});
+denSlider.style.setProperty('--val', `${((100-20)/130)*100}%`);
+
+/* =====================================================
+   8. UTC CLOCK
+   ===================================================== */
+function tickClock() {
+  const now = new Date();
+  const hh = String(now.getUTCHours()).padStart(2, '0');
+  const mm = String(now.getUTCMinutes()).padStart(2, '0');
+  const ss = String(now.getUTCSeconds()).padStart(2, '0');
+  document.getElementById('utc-time').textContent = `${hh}:${mm}:${ss}`;
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+/* =====================================================
+   9. RESIZE HANDLING
+   ===================================================== */
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* =====================================================
+   10. CLOUD QUIZ MODULE
+   ===================================================== */
+const quizOverlay = document.getElementById('quiz-overlay');
+const quizModal = document.getElementById('quiz-modal');
+const ROUNDS = 20;
+
+let quizState = null;
+
+// Separate tiny renderer for quiz preview canvas
+let quizRenderer = null;
+let quizScene = null;
+let quizCamera = null;
+let quizCloudGroup = null;
+let quizClock = new THREE.Clock();
+let quizAnimId = null;
+
+function initQuizRenderer() {
+  if (quizRenderer) return;
+  const canvas = document.getElementById('quiz-canvas');
+  if (!canvas) return;
+  quizRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  quizRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  quizRenderer.setSize(w, h, false);
+  quizRenderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  quizScene = new THREE.Scene();
+  quizScene.fog = new THREE.FogExp2(0x0a121e, 0.004);
+  quizCamera = new THREE.PerspectiveCamera(55, w / h, 0.5, 1500);
+  quizCamera.position.set(0, 18, 200);
+
+  quizScene.add(new THREE.AmbientLight(0x6680a0, 0.7));
+  const sun2 = new THREE.DirectionalLight(0xfff4d8, 1.0);
+  sun2.position.set(120, 180, 100);
+  quizScene.add(sun2);
+}
+
+function buildQuizCloud(typeKey) {
+  if (quizCloudGroup) {
+    quizCloudGroup.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
+        else o.material.dispose();
+      }
+    });
+    quizScene.remove(quizCloudGroup);
+  }
+
+  // Re-use buildCloud logic but in quizScene
+  const def = CLOUDS[typeKey];
+  const group = new THREE.Group();
+  group.userData.def = def;
+
+  const tex = buildPuffTexture({
+    size: 128,
+    fibrous: !!def.fibrous,
+    dense: !!def.dense,
+    seed: typeKey.charCodeAt(0) + typeKey.charCodeAt(1)
+  });
+  const baseColor = new THREE.Color(def.color[0]/255, def.color[1]/255, def.color[2]/255);
+  const partCount = Math.round(def.particles * 0.85);
+  const baseHeight = etageBaseHeight(def);
+
+  for (let i = 0; i < partCount; i++) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex,
+      color: baseColor,
+      transparent: true,
+      opacity: def.opacity,
+      depthWrite: false,
+      fog: true
+    }));
+    let px, py, pz, sx, sy;
+    const [spreadX, spreadY, spreadZ] = def.spread;
+    const [scaleX, scaleY, scaleZ] = def.scale;
+
+    if (def.isCb) {
+      const t = i / partCount;
+      if (t < 0.55) {
+        const towerH = t / 0.55;
+        const ang = Math.random() * Math.PI * 2;
+        const radius = (8 + towerH * 26) * (0.6 + Math.random() * 0.5);
+        px = Math.cos(ang) * radius;
+        pz = Math.sin(ang) * radius;
+        py = baseHeight + towerH * 70 + (Math.random() - 0.5) * 8;
+        const s = scaleX * (0.85 + Math.random() * 0.6);
+        sx = s; sy = s * (0.85 + Math.random() * 0.4);
+      } else {
+        const anvilT = (t - 0.55) / 0.45;
+        const ang = Math.random() * Math.PI * 2;
+        const radius = 30 + anvilT * 90 + Math.random() * 18;
+        px = Math.cos(ang) * radius;
+        pz = Math.sin(ang) * radius;
+        py = baseHeight + 70 + Math.random() * 14 - anvilT * 4;
+        const s = scaleX * (1.4 + Math.random() * 0.8);
+        sx = s * 1.3; sy = s * 0.7;
+      }
+    } else if (def.puffy) {
+      const clusterCount = 4;
+      const clusterIdx = i % clusterCount;
+      const clusterAng = (clusterIdx / clusterCount) * Math.PI * 2;
+      const clusterRad = 35 + clusterIdx * 12;
+      const ccx = Math.cos(clusterAng) * clusterRad;
+      const ccz = Math.sin(clusterAng) * clusterRad;
+      const lr = Math.pow(Math.random(), 0.6) * 18;
+      const la = Math.random() * Math.PI * 2;
+      px = ccx + Math.cos(la) * lr;
+      pz = ccz + Math.sin(la) * lr;
+      py = baseHeight + Math.pow(Math.random(), 1.5) * scaleY * 1.4 + Math.random() * 4;
+      const s = scaleX * (0.7 + Math.random() * 0.7);
+      sx = s; sy = s;
+    } else if (def.grid) {
+      const cols = Math.ceil(Math.sqrt(partCount));
+      const ix = i % cols;
+      const iz = Math.floor(i / cols);
+      const colsZ = Math.ceil(partCount / cols);
+      const stepX = spreadX / cols;
+      const stepZ = spreadZ / colsZ;
+      px = (ix - cols / 2) * stepX + (Math.random() - 0.5) * stepX * 0.4;
+      pz = (iz - colsZ / 2) * stepZ + (Math.random() - 0.5) * stepZ * 0.4;
+      py = baseHeight + (Math.random() - 0.5) * spreadY;
+      const s = scaleX * (0.7 + Math.random() * 0.5);
+      sx = s; sy = s * (def.abbr === 'Cc' ? 0.7 : 0.85);
+    } else if (def.fibrous) {
+      px = (Math.random() - 0.5) * spreadX;
+      pz = (Math.random() - 0.5) * spreadZ;
+      py = baseHeight + (Math.random() - 0.5) * spreadY;
+      const s = scaleX * (0.8 + Math.random() * 0.7);
+      sx = s; sy = scaleY * (0.8 + Math.random() * 0.5);
+    } else if (def.sheet) {
+      px = (Math.random() - 0.5) * spreadX;
+      pz = (Math.random() - 0.5) * spreadZ;
+      py = baseHeight + (Math.random() - 0.5) * spreadY;
+      const s = scaleX * (0.8 + Math.random() * 0.5);
+      sx = s; sy = scaleY * (1.0 + Math.random() * 0.6);
+    } else if (def.lumpy) {
+      const ang = Math.random() * Math.PI * 2;
+      const rad = Math.pow(Math.random(), 0.65) * spreadX * 0.5;
+      px = Math.cos(ang) * rad;
+      pz = Math.sin(ang) * rad;
+      py = baseHeight + (Math.random() - 0.5) * spreadY;
+      const s = scaleX * (0.7 + Math.random() * 0.6);
+      sx = s; sy = s * (0.7 + Math.random() * 0.4);
+    } else {
+      px = (Math.random() - 0.5) * spreadX;
+      pz = (Math.random() - 0.5) * spreadZ;
+      py = baseHeight + (Math.random() - 0.5) * spreadY;
+      const s = scaleX * (0.8 + Math.random() * 0.5);
+      sx = s; sy = scaleY * (0.8 + Math.random() * 0.5);
+    }
+
+    sprite.position.set(px, py, pz);
+    sprite.scale.set(sx, sy, 1);
+    const shade = 0.85 + Math.random() * 0.18;
+    sprite.material.color.setRGB(baseColor.r * shade, baseColor.g * shade, baseColor.b * shade);
+    sprite.userData.basePos = sprite.position.clone();
+    sprite.userData.bobPhase = Math.random() * Math.PI * 2;
+    group.add(sprite);
+  }
+
+  // CB extra dark base
+  if (def.isCb) {
+    const darkTex = buildPuffTexture({ size: 128, dense: true, seed: 99 });
+    for (let i = 0; i < 40; i++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: darkTex, color: new THREE.Color(0x202830),
+        transparent: true, opacity: 0.55, depthWrite: false, fog: true
+      }));
+      const ang = Math.random() * Math.PI * 2;
+      const rad = Math.random() * 28;
+      sprite.position.set(Math.cos(ang) * rad, baseHeight - 5 + Math.random() * 6, Math.sin(ang) * rad);
+      const s = 26 + Math.random() * 16;
+      sprite.scale.set(s, s * 0.8, 1);
+      sprite.userData.basePos = sprite.position.clone();
+      sprite.userData.bobPhase = Math.random() * Math.PI * 2;
+      group.add(sprite);
+    }
+  }
+
+  quizScene.add(group);
+  quizCloudGroup = group;
+}
+
+function quizAnimate() {
+  if (!quizRenderer) return;
+  const elapsed = quizClock.elapsedTime;
+  if (quizCloudGroup) {
+    const orbitR = 200;
+    quizCamera.position.x = Math.sin(elapsed * 0.08) * orbitR;
+    quizCamera.position.z = Math.cos(elapsed * 0.08) * orbitR;
+    quizCamera.position.y = 18 + Math.sin(elapsed * 0.3) * 3;
+    quizCamera.lookAt(0, etageBaseHeight(quizCloudGroup.userData.def) * 0.4, 0);
+    quizCloudGroup.children.forEach(s => {
+      s.position.y = s.userData.basePos.y + Math.sin(elapsed * 0.5 + s.userData.bobPhase) * 0.1;
+    });
+  }
+  quizClock.getDelta();
+  quizRenderer.render(quizScene, quizCamera);
+  quizAnimId = requestAnimationFrame(quizAnimate);
+}
+
+function startQuiz() {
+  quizState = {
+    round: 0,
+    score: 0,
+    correct: 0,
+    wrong: 0,
+    answers: [],
+    locked: false
+  };
+  quizOverlay.classList.add('active');
+  renderQuizRound();
+}
+
+function endQuiz() {
+  quizOverlay.classList.remove('active');
+  if (quizAnimId) { cancelAnimationFrame(quizAnimId); quizAnimId = null; }
+}
+
+function buildQuizRound() {
+  const correctKey = CLOUD_KEYS[Math.floor(Math.random() * CLOUD_KEYS.length)];
+  // 3 distractors
+  const pool = CLOUD_KEYS.filter(k => k !== correctKey);
+  // Shuffle
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const distractors = pool.slice(0, 3);
+  const options = [...distractors, correctKey];
+  // Shuffle options
+  for (let i = options.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [options[i], options[j]] = [options[j], options[i]];
+  }
+  return { correctKey, options };
+}
+
+function renderQuizRound() {
+  if (quizState.round >= ROUNDS) {
+    renderResult();
+    return;
+  }
+
+  const round = buildQuizRound();
+  quizState.currentRound = round;
+  quizState.locked = false;
+
+  const progressPct = (quizState.round / ROUNDS) * 100;
+
+  quizModal.innerHTML = `
+    <div class="quiz-header">
+      <h2>◉ Cloud Identification — Round ${quizState.round + 1}/${ROUNDS}</h2>
+      <button class="close-btn" id="quiz-close">✕</button>
+    </div>
+    <div class="quiz-progress">
+      <span>Progress: <span>${quizState.round}/${ROUNDS}</span></span>
+      <span>Score: <span class="score">${quizState.score}</span></span>
+    </div>
+    <div class="progress-bar"><div class="fill" style="width:${progressPct}%"></div></div>
+
+    <div class="quiz-canvas-wrap">
+      <canvas id="quiz-canvas"></canvas>
+    </div>
+
+    <div class="quiz-question">Identify this cloud genus</div>
+
+    <div class="quiz-options">
+      ${round.options.map(k => `
+        <button class="quiz-option" data-key="${k}">
+          <span class="opt-abbr">${CLOUDS[k].abbr}</span>
+          <span class="opt-name">${CLOUDS[k].name} · ${CLOUDS[k].etage}</span>
+        </button>
+      `).join('')}
+    </div>
+  `;
+
+  document.getElementById('quiz-close').addEventListener('click', endQuiz);
+
+  // Init/refresh quiz renderer
+  initQuizRenderer();
+  // resize
+  const canvas = document.getElementById('quiz-canvas');
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (quizRenderer && (canvas.width !== w * (window.devicePixelRatio || 1))) {
+    quizRenderer = null;
+    initQuizRenderer();
+  } else if (quizRenderer) {
+    quizRenderer.setSize(w, h, false);
+    quizCamera.aspect = w / h;
+    quizCamera.updateProjectionMatrix();
+  }
+
+  buildQuizCloud(round.correctKey);
+  quizClock = new THREE.Clock();
+  if (quizAnimId) cancelAnimationFrame(quizAnimId);
+  quizAnimate();
+
+  document.querySelectorAll('.quiz-option').forEach(btn => {
+    btn.addEventListener('click', e => {
+      if (quizState.locked) return;
+      quizState.locked = true;
+      const choice = btn.dataset.key;
+      const correct = choice === round.correctKey;
+      if (correct) {
+        quizState.score += 5;
+        quizState.correct++;
+        btn.classList.add('correct');
+      } else {
+        quizState.wrong++;
+        btn.classList.add('wrong');
+        // Highlight correct one
+        document.querySelectorAll('.quiz-option').forEach(b => {
+          if (b.dataset.key === round.correctKey) b.classList.add('correct');
+        });
+      }
+      quizState.answers.push({
+        round: quizState.round + 1,
+        correct: round.correctKey,
+        chosen: choice,
+        isCorrect: correct
+      });
+      // Update header score
+      document.querySelector('.quiz-progress .score').textContent = quizState.score;
+
+      // Disable all
+      document.querySelectorAll('.quiz-option').forEach(b => b.disabled = true);
+
+      setTimeout(() => {
+        quizState.round++;
+        renderQuizRound();
+      }, 1100);
+    });
+  });
+}
+
+function renderResult() {
+  if (quizAnimId) { cancelAnimationFrame(quizAnimId); quizAnimId = null; }
+  const acc = quizState.correct / ROUNDS;
+  let grade, label, isPoor = false;
+  if (acc >= 0.95) { grade = 'A+'; label = 'Captain Class — Outstanding!'; }
+  else if (acc >= 0.85) { grade = 'A'; label = 'IFR Rated — Excellent recognition'; }
+  else if (acc >= 0.75) { grade = 'B'; label = 'PPL Standard — Solid grasp'; }
+  else if (acc >= 0.60) { grade = 'C'; label = 'Student Pilot — Keep studying'; }
+  else if (acc >= 0.40) { grade = 'D'; label = 'Pre-Solo — Review WMO atlas'; isPoor = true; }
+  else { grade = 'F'; label = 'Refresher needed — Try again'; isPoor = true; }
+
+  quizModal.innerHTML = `
+    <div class="quiz-header">
+      <h2>◉ Quiz Complete — Final Report</h2>
+      <button class="close-btn" id="quiz-close">✕</button>
+    </div>
+    <div class="result-dash">
+      <div class="grade ${isPoor ? 'poor' : ''}">${grade}</div>
+      <div class="summary">${label}</div>
+
+      <div class="result-stats">
+        <div class="stat">
+          <div class="lbl">Total Score</div>
+          <div class="val accent">${quizState.score}<span style="font-size:12px; color: var(--txt-mute);"> / ${ROUNDS * 5}</span></div>
+        </div>
+        <div class="stat">
+          <div class="lbl">Correct</div>
+          <div class="val ok">${quizState.correct}<span style="font-size:12px; color: var(--txt-mute);"> / ${ROUNDS}</span></div>
+        </div>
+        <div class="stat">
+          <div class="lbl">Accuracy</div>
+          <div class="val ${acc >= 0.7 ? 'ok' : acc >= 0.5 ? 'warn' : 'danger'}">${Math.round(acc * 100)}%</div>
+        </div>
+      </div>
+
+      <div class="result-list" id="result-list">
+        ${quizState.answers.map(a => `
+          <div class="result-row">
+            <span class="num">${String(a.round).padStart(2,'0')}</span>
+            <span class="icon ${a.isCorrect ? 'ok' : 'bad'}">${a.isCorrect ? '✓' : '✗'}</span>
+            <span class="corr">${CLOUDS[a.correct].abbr} <span style="color: var(--txt-mute);">— ${CLOUDS[a.correct].name}</span></span>
+            ${a.isCorrect
+              ? `<span class="ans">your: ${CLOUDS[a.chosen].abbr}</span>`
+              : `<span class="ans bad">your: ${CLOUDS[a.chosen].abbr}</span>`}
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="btn-row" style="max-width: 360px; margin: 0 auto;">
+        <button id="btn-retry" class="primary">↻ Retry</button>
+        <button id="btn-close" class="">Close</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('quiz-close').addEventListener('click', endQuiz);
+  document.getElementById('btn-retry').addEventListener('click', startQuiz);
+  document.getElementById('btn-close').addEventListener('click', endQuiz);
+}
+
+document.getElementById('btn-quiz').addEventListener('click', startQuiz);
+
+// Close quiz on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && quizOverlay.classList.contains('active')) endQuiz();
+});
+
+/* =====================================================
+   11. KICKOFF
+   ===================================================== */
+setCloud('Cu'); // start with friendly Cumulus
+animate();
+
+// Hide splash after first frame
+requestAnimationFrame(() => {
+  setTimeout(() => {
+    document.getElementById('splash').classList.add('hide');
+  }, 250);
+});
+
+</script>
+</body>
+</html>
