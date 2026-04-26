@@ -1335,7 +1335,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x0a121e, 0.0035);
 
-const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 2500);
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 6000);
 camera.position.set(0, 18, 220);
 camera.lookAt(0, 10, 0);
 
@@ -1361,7 +1361,7 @@ const skyUniforms = {
   uMoonIntensity:{ value: 0.0 }
 };
 
-const skyGeo = new THREE.SphereGeometry(1500, 48, 32);
+const skyGeo = new THREE.SphereGeometry(4000, 48, 32);
 const skyMat = new THREE.ShaderMaterial({
   uniforms: skyUniforms,
   side: THREE.BackSide,
@@ -1455,108 +1455,114 @@ stars.renderOrder = -0.5;
 scene.add(stars);
 
 /* =====================================================
-   4a. BEACH ENVIRONMENT (procedural ground, water, mountain, palms, gulls)
+   4a. COASTAL CITY ENVIRONMENT
+   Lowpoly LA-style coastline: city grid, beach, ocean,
+   coastal hills, distant islands, gulls, plane
    ===================================================== */
 const ENV_GROUND_Y = -25;        // sea level
-const ENV_BEACH_Y  = ENV_GROUND_Y + 1.2;
-const ENV_MOUNTAIN_HEIGHT = 200; // 200m reference
+const ENV_BEACH_Y  = ENV_GROUND_Y + 0.6;
 
-// Shared uniforms so environment can sync with sky/sun
+// Convention: +X = inland (east), -X = ocean (west). Coastline runs along Z axis around x≈0.
+// Camera/cloud focus is at origin, so we get coast ahead and city behind.
+
 const envUniforms = {
   uTime:      { value: 0 },
   uSunDir:    skyUniforms.uSunDir,    // shared reference
   uSunColor:  skyUniforms.uSunColor,  // shared reference
   uSunInt:    skyUniforms.uSunIntensity,
   uHorizon:   skyUniforms.uHorizonColor,
-  uAmbient:   { value: new THREE.Color(0x6680a0) }, // synced from setTimeOfDay
-  uAmbientI:  { value: 0.7 }
+  uAmbient:   { value: new THREE.Color(0x6680a0) },
+  uAmbientI:  { value: 0.7 },
+  uCityLights:{ value: 0.0 } // 0 daylight, 1 night — controls building window glow
 };
 
-// ---- Sand beach (large heightmapped plane, dune-ish) ----
-function makeBeach() {
-  const SIZE = 4000;
-  const SEG = 96;
-  const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
+/* ---- Heightmap helper ----
+   Returns terrain elevation at world (x, z). Coastline is at x = 0.
+   x < 0  -> below sea level (ocean floor)
+   x > 0  -> rises gently then steeper into hills (max ~70 units far inland)
+*/
+function landHeight(x, z) {
+  if (x < 0) return -2.0; // ocean floor
+  // Beach band: 0..40 units inland, mostly flat, slight rise
+  const beachT = Math.min(1, x / 40);
+  const beach = beachT * 1.2;
+  // City band: 40..400 inland, mostly flat with very gentle bumps
+  const cityT = Math.min(1, Math.max(0, (x - 40) / 360));
+  const city = cityT * 3.0 + (fbm2D(x * 0.008, z * 0.008, 3) - 0.5) * 2.0;
+  // Foothills band: 400..900
+  const hillT = Math.min(1, Math.max(0, (x - 400) / 500));
+  const hills = hillT * hillT * 28 + (fbm2D(x * 0.005, z * 0.005, 4) - 0.5) * 14 * hillT;
+  // Mountain band: 900+
+  const mtT = Math.max(0, (x - 900) / 600);
+  const mountains = mtT * 65 + (fbm2D(x * 0.004, z * 0.003, 5) - 0.5) * 35 * Math.min(1, mtT);
+  return beach + city + hills + mountains;
+}
+
+/* ---- Terrain (single tessellated plane covering land + foothills + mountains) ---- */
+function makeTerrain() {
+  const SIZE_X = 4000; // along inland direction
+  const SIZE_Z = 4000;
+  const SEG_X = 200;
+  const SEG_Z = 160;
+  const geo = new THREE.PlaneGeometry(SIZE_X, SIZE_Z, SEG_X, SEG_Z);
   geo.rotateX(-Math.PI / 2);
-  // Deform vertices with fbm to give dunes
+  // Center plane so positive X extends inland: shift +X by half size
+  geo.translate(SIZE_X / 2 - 80, 0, 0); // -80 puts a little bit of ocean floor behind beach line
+
   const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+
+  // Color palette (lowpoly painterly, BMX-like)
+  const C_OCEAN  = [0.10, 0.22, 0.32];   // dark teal floor (rarely visible — water hides it)
+  const C_BEACH  = [0.85, 0.78, 0.60];   // warm sand
+  const C_CITY   = [0.36, 0.34, 0.32];   // grey-brown urban ground
+  const C_PARK   = [0.34, 0.46, 0.30];   // green spaces
+  const C_HILL   = [0.45, 0.42, 0.30];   // dry foothills (chaparral)
+  const C_HILL_GREEN = [0.38, 0.48, 0.32];
+  const C_MTN    = [0.42, 0.38, 0.34];   // rocky brown
+  const C_SNOW   = [0.92, 0.94, 1.00];
+
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
-    // Distance from origin — beach near origin, mountain far
-    const r = Math.sqrt(x * x + z * z) / SIZE;
-    const noise = fbm2D(x * 0.005 + 100, z * 0.005 + 100, 5);
-    const dunes = noise * 6 * Math.min(1, r * 2.5);
-    pos.setY(i, dunes);
+    const h = landHeight(x, z);
+    pos.setY(i, h);
+
+    // Vertex colors based on band + jitter
+    let col;
+    if (x < 0) col = C_OCEAN;
+    else if (x < 38) col = C_BEACH;
+    else if (x < 380) {
+      // City: mostly grey, occasional park patches based on noise
+      const park = fbm2D(x * 0.02, z * 0.02, 3);
+      col = park > 0.62 ? C_PARK : C_CITY;
+    }
+    else if (x < 880) {
+      // Foothills: dry chaparral with green patches
+      const greenness = fbm2D(x * 0.006, z * 0.006, 3);
+      col = greenness > 0.55 ? C_HILL_GREEN : C_HILL;
+    }
+    else {
+      // Mountains: rocky, snow on top
+      col = h > 80 ? C_SNOW : C_MTN;
+    }
+    // Slight per-vertex noise jitter for painterly variation
+    const jitter = (fbm2D(x * 0.05, z * 0.05, 2) - 0.5) * 0.08;
+    colors[i * 3]     = Math.max(0, Math.min(1, col[0] + jitter));
+    colors[i * 3 + 1] = Math.max(0, Math.min(1, col[1] + jitter));
+    colors[i * 3 + 2] = Math.max(0, Math.min(1, col[2] + jitter));
   }
   pos.needsUpdate = true;
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
 
-  const mat = new THREE.ShaderMaterial({
-    uniforms: {
-      uTime: envUniforms.uTime,
-      uSunDir: envUniforms.uSunDir,
-      uSunColor: envUniforms.uSunColor,
-      uSunInt: envUniforms.uSunInt,
-      uAmbient: envUniforms.uAmbient,
-      uAmbientI: envUniforms.uAmbientI,
-      uHorizon: envUniforms.uHorizon,
-      uFogColor: { value: scene.fog.color },
-      uFogDensity: { value: scene.fog.density }
-    },
-    vertexShader: /* glsl */`
-      varying vec3 vNormal;
-      varying vec3 vWorldPos;
-      varying float vDistFromOrigin;
-      void main() {
-        vNormal = normalize(normalMatrix * normal);
-        vec4 wp = modelMatrix * vec4(position, 1.0);
-        vWorldPos = wp.xyz;
-        vDistFromOrigin = length(position.xz);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: /* glsl */`
-      uniform vec3 uSunDir;
-      uniform vec3 uSunColor;
-      uniform float uSunInt;
-      uniform vec3 uAmbient;
-      uniform float uAmbientI;
-      uniform vec3 uHorizon;
-      uniform vec3 uFogColor;
-      uniform float uFogDensity;
-      varying vec3 vNormal;
-      varying vec3 vWorldPos;
-      varying float vDistFromOrigin;
-
-      // Hash for noise
-      float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-
-      void main() {
-        // Sand color varies subtly: lighter near water, slightly darker at dunes
-        vec3 sandWet = vec3(0.78, 0.69, 0.55);
-        vec3 sandDry = vec3(0.92, 0.85, 0.68);
-        // Use distance from origin as beach proximity proxy: <100 = beach, >300 = inland
-        float beachMix = smoothstep(40.0, 200.0, vDistFromOrigin);
-        vec3 baseSand = mix(sandWet, sandDry, beachMix);
-        // Grain texture
-        float grain = h(floor(vWorldPos.xz * 2.0)) * 0.08;
-        baseSand += grain - 0.04;
-
-        // Lighting
-        vec3 N = normalize(vNormal);
-        float ndl = max(dot(N, normalize(uSunDir)), 0.0);
-        vec3 lit = baseSand * (uAmbient * uAmbientI + uSunColor * uSunInt * ndl);
-
-        // Fog
-        float dist = length(vWorldPos - cameraPosition);
-        float fogFactor = 1.0 - exp(-uFogDensity * dist * dist);
-        vec3 finalCol = mix(lit, uFogColor, clamp(fogFactor, 0.0, 1.0));
-
-        gl_FragColor = vec4(finalCol, 1.0);
-      }
-    `,
-    side: THREE.DoubleSide
+  // Flat shading for that lowpoly look
+  const mat = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    flatShading: true,
+    roughness: 0.95,
+    metalness: 0.0,
+    fog: true
   });
 
   const mesh = new THREE.Mesh(geo, mat);
@@ -1564,11 +1570,10 @@ function makeBeach() {
   return mesh;
 }
 
-// ---- Ocean (animated wave shader) ----
+/* ---- Ocean ---- */
 function makeOcean() {
-  // Half-disk of water on one side (negative X side = ocean, positive X = beach/mountain)
-  const SIZE = 4000;
-  const geo = new THREE.PlaneGeometry(SIZE, SIZE, 64, 64);
+  const SIZE = 6000;
+  const geo = new THREE.PlaneGeometry(SIZE, SIZE, 80, 80);
   geo.rotateX(-Math.PI / 2);
 
   const mat = new THREE.ShaderMaterial({
@@ -1587,8 +1592,6 @@ function makeOcean() {
       uniform float uTime;
       varying vec3 vWorldPos;
       varying vec3 vNormal;
-
-      // Simple sum-of-sines waves
       float wave(vec2 p, vec2 dir, float wavelength, float speed, float amp, float t) {
         float k = 6.283185 / wavelength;
         float phase = dot(dir, p) * k - speed * t;
@@ -1598,18 +1601,16 @@ function makeOcean() {
         vec3 p = position;
         float t = uTime;
         float h = 0.0;
-        h += wave(p.xz, normalize(vec2(1.0, 0.6)), 28.0, 1.4, 0.55, t);
-        h += wave(p.xz, normalize(vec2(-0.5, 1.0)), 17.0, 1.7, 0.32, t);
-        h += wave(p.xz, normalize(vec2(0.7, -0.3)), 9.0, 2.1, 0.18, t);
+        h += wave(p.xz, normalize(vec2(1.0, 0.6)), 36.0, 1.2, 0.45, t);
+        h += wave(p.xz, normalize(vec2(-0.5, 1.0)), 22.0, 1.5, 0.25, t);
+        h += wave(p.xz, normalize(vec2(0.7, -0.3)), 12.0, 1.9, 0.14, t);
         p.y += h;
 
-        // Approx normal via partial derivatives of the wave functions
         float eps = 0.5;
-        float hx = 0.0, hz = 0.0;
-        hx += wave(vec2(p.x + eps, p.z), normalize(vec2(1.0, 0.6)), 28.0, 1.4, 0.55, t);
-        hx += wave(vec2(p.x + eps, p.z), normalize(vec2(-0.5, 1.0)), 17.0, 1.7, 0.32, t);
-        hz += wave(vec2(p.x, p.z + eps), normalize(vec2(1.0, 0.6)), 28.0, 1.4, 0.55, t);
-        hz += wave(vec2(p.x, p.z + eps), normalize(vec2(-0.5, 1.0)), 17.0, 1.7, 0.32, t);
+        float hx = wave(vec2(p.x + eps, p.z), normalize(vec2(1.0, 0.6)), 36.0, 1.2, 0.45, t)
+                 + wave(vec2(p.x + eps, p.z), normalize(vec2(-0.5, 1.0)), 22.0, 1.5, 0.25, t);
+        float hz = wave(vec2(p.x, p.z + eps), normalize(vec2(1.0, 0.6)), 36.0, 1.2, 0.45, t)
+                 + wave(vec2(p.x, p.z + eps), normalize(vec2(-0.5, 1.0)), 22.0, 1.5, 0.25, t);
         vec3 nrm = normalize(vec3(h - hx, eps, h - hz));
         vNormal = (modelMatrix * vec4(nrm, 0.0)).xyz;
 
@@ -1635,30 +1636,25 @@ function makeOcean() {
         vec3 V = normalize(cameraPosition - vWorldPos);
         vec3 L = normalize(uSunDir);
 
-        // Deep water color, shallow water near beach is brighter teal
         vec3 deep = vec3(0.04, 0.13, 0.22);
-        vec3 shallow = vec3(0.20, 0.45, 0.55);
-        // Distance from origin's beach edge (rough)
-        float beachProx = smoothstep(0.0, 200.0, length(vWorldPos.xz));
-        vec3 waterCol = mix(shallow, deep, beachProx);
+        vec3 shallow = vec3(0.18, 0.40, 0.50);
+        // Shallower closer to coast (x near 0)
+        float coastProx = smoothstep(0.0, 200.0, abs(vWorldPos.x));
+        vec3 waterCol = mix(shallow, deep, coastProx);
 
-        // Diffuse-ish tint from sun
         float ndl = max(dot(N, L), 0.0);
         vec3 diffuse = waterCol * (uAmbient * uAmbientI + uSunColor * uSunInt * ndl * 0.4);
 
-        // Specular sun glint (Phong-like)
         vec3 R = reflect(-L, N);
         float spec = pow(max(dot(R, V), 0.0), 80.0);
         vec3 glint = uSunColor * spec * uSunInt * 1.4;
 
-        // Fresnel — adds horizon-tinted reflection at grazing angles
         float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
         vec3 reflectionCol = mix(uHorizon, vec3(1.0), 0.2);
         vec3 fresColor = reflectionCol * fres * (0.4 + uSunInt * 0.6);
 
         vec3 col = diffuse + glint + fresColor;
 
-        // Fog
         float dist = length(vWorldPos - cameraPosition);
         float fogFactor = 1.0 - exp(-uFogDensity * dist * dist);
         col = mix(col, uFogColor, clamp(fogFactor, 0.0, 1.0));
@@ -1671,164 +1667,191 @@ function makeOcean() {
   });
 
   const mesh = new THREE.Mesh(geo, mat);
-  // Place water on the negative-X side (beach faces it). Offset so beach is around origin.
-  mesh.position.set(-2000, ENV_GROUND_Y - 0.3, 0);
+  // Center on ocean side: ocean reaches from x=-3000 inland to x=10 (slight overlap with terrain)
+  mesh.position.set(-2500, ENV_GROUND_Y - 0.3, 0);
   return mesh;
 }
 
-// ---- Reference mountain (200m high) ----
-function makeMountain() {
-  // Cone-based mountain with vertex deformation
-  const geo = new THREE.ConeGeometry(180, ENV_MOUNTAIN_HEIGHT, 28, 18);
-  // Deform vertices for natural ridges
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = pos.getZ(i);
-    const r = Math.sqrt(x * x + z * z);
-    const heightT = (y + ENV_MOUNTAIN_HEIGHT / 2) / ENV_MOUNTAIN_HEIGHT; // 0 at base, 1 at peak
-    const ang = Math.atan2(z, x);
-    // Ridge noise
-    const ridge = fbm2D(ang * 4, heightT * 5, 4) * 18 * (1 - heightT * 0.7);
-    const newR = r + ridge;
-    pos.setX(i, Math.cos(ang) * newR);
-    pos.setZ(i, Math.sin(ang) * newR);
-    // Slight vertical noise
-    pos.setY(i, y + (fbm2D(x * 0.02, z * 0.02, 3) - 0.5) * 6);
-  }
-  pos.needsUpdate = true;
-  geo.computeVertexNormals();
+/* ---- City buildings (lowpoly box clusters) ---- */
+function makeCity() {
+  const group = new THREE.Group();
 
-  const mat = new THREE.ShaderMaterial({
-    uniforms: {
-      uTime: envUniforms.uTime,
-      uSunDir: envUniforms.uSunDir,
-      uSunColor: envUniforms.uSunColor,
-      uSunInt: envUniforms.uSunInt,
-      uAmbient: envUniforms.uAmbient,
-      uAmbientI: envUniforms.uAmbientI,
-      uHorizon: envUniforms.uHorizon,
-      uFogColor: { value: scene.fog.color },
-      uFogDensity: { value: scene.fog.density },
-      uPeakY: { value: ENV_GROUND_Y + ENV_MOUNTAIN_HEIGHT }
-    },
-    vertexShader: /* glsl */`
-      varying vec3 vNormal;
-      varying vec3 vWorldPos;
-      varying float vHeight;
-      void main() {
-        vNormal = normalize(normalMatrix * normal);
-        vec4 wp = modelMatrix * vec4(position, 1.0);
-        vWorldPos = wp.xyz;
-        vHeight = wp.y;
-        gl_Position = projectionMatrix * viewMatrix * wp;
-      }
-    `,
-    fragmentShader: /* glsl */`
-      uniform vec3 uSunDir;
-      uniform vec3 uSunColor;
-      uniform float uSunInt;
-      uniform vec3 uAmbient;
-      uniform float uAmbientI;
-      uniform vec3 uHorizon;
-      uniform vec3 uFogColor;
-      uniform float uFogDensity;
-      uniform float uPeakY;
-      varying vec3 vNormal;
-      varying vec3 vWorldPos;
-      varying float vHeight;
+  // Material variants for that painterly BMX look
+  const matLight = new THREE.MeshStandardMaterial({ color: 0xc8c2b0, roughness: 0.85, flatShading: true, fog: true });
+  const matMid   = new THREE.MeshStandardMaterial({ color: 0x9a8e78, roughness: 0.85, flatShading: true, fog: true });
+  const matDark  = new THREE.MeshStandardMaterial({ color: 0x5a5246, roughness: 0.85, flatShading: true, fog: true });
+  const matRoof  = new THREE.MeshStandardMaterial({ color: 0x44403a, roughness: 0.9, flatShading: true, fog: true });
+  const mats = [matLight, matMid, matDark];
 
-      void main() {
-        // Color band: rocky base -> grass-tinted mid -> snow cap
-        vec3 rock = vec3(0.32, 0.30, 0.27);
-        vec3 alpine = vec3(0.42, 0.46, 0.40);
-        vec3 snow = vec3(0.92, 0.94, 1.0);
-        float t = clamp(vHeight / uPeakY, 0.0, 1.0);
-        vec3 baseCol = mix(rock, alpine, smoothstep(0.05, 0.45, t));
-        baseCol = mix(baseCol, snow, smoothstep(0.62, 0.78, t));
-
-        vec3 N = normalize(vNormal);
-        float ndl = max(dot(N, normalize(uSunDir)), 0.0);
-        vec3 lit = baseCol * (uAmbient * uAmbientI + uSunColor * uSunInt * ndl);
-
-        // Fog
-        float dist = length(vWorldPos - cameraPosition);
-        float fogFactor = 1.0 - exp(-uFogDensity * dist * dist);
-        vec3 finalCol = mix(lit, uFogColor, clamp(fogFactor, 0.0, 1.0));
-
-        gl_FragColor = vec4(finalCol, 1.0);
-      }
-    `
+  // Window-emitting material (uses MeshStandardMaterial with emissive controlled at runtime)
+  const matWin = new THREE.MeshStandardMaterial({
+    color: 0x1a1c20,
+    emissive: 0xffd388,
+    emissiveIntensity: 0.0, // animated by setTimeOfDay
+    roughness: 0.5,
+    flatShading: true,
+    fog: true
   });
-  const mesh = new THREE.Mesh(geo, mat);
-  // Place far inland (positive X), away from beach, so it's a horizon reference
-  mesh.position.set(700, ENV_GROUND_Y + ENV_MOUNTAIN_HEIGHT / 2, -300);
-  return mesh;
+  group.userData.windowMat = matWin;
+
+  // Shared geometries (we instance via cloned meshes for simplicity & lowpoly count)
+  const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+
+  // Seeded RNG so the city is deterministic
+  let rng = 0xc173;
+  const r = () => { rng = (rng * 1664525 + 1013904223) & 0xffffffff; return ((rng >>> 0) / 4294967295); };
+
+  // Generate city in a strip from x=42 (just past beach) to x=380 (foothills start)
+  // Width along Z: ±900
+  const CITY_X_START = 45;
+  const CITY_X_END = 380;
+  const CITY_Z_HALF = 900;
+
+  // Block grid: simulate street layout (~ every 14 units)
+  const BLOCK_X = 14;
+  const BLOCK_Z = 14;
+
+  for (let bx = CITY_X_START; bx < CITY_X_END; bx += BLOCK_X) {
+    for (let bz = -CITY_Z_HALF; bz < CITY_Z_HALF; bz += BLOCK_Z) {
+      // Skip some blocks to leave gaps for streets/parks
+      const skipR = r();
+      if (skipR < 0.15) continue;
+
+      // Per-block: 1-3 buildings
+      const buildingsHere = 1 + Math.floor(r() * 3);
+      for (let bi = 0; bi < buildingsHere; bi++) {
+        // Building footprint within block
+        const fpw = 2 + r() * 6;       // width along X
+        const fpd = 2 + r() * 6;       // depth along Z
+        // Heights: city center (mid-X) is taller, edges shorter
+        const cityT = (bx - CITY_X_START) / (CITY_X_END - CITY_X_START); // 0..1
+        const proximityToCenter = 1 - Math.abs(cityT - 0.4) * 2; // peak around 40% in
+        const baseH = 2 + r() * 4 + proximityToCenter * (3 + r() * 14);
+        // Occasional skyscrapers
+        const skyscraper = r() < 0.04 && proximityToCenter > 0.4;
+        const h = skyscraper ? baseH + 15 + r() * 30 : baseH;
+
+        const px = bx + (r() - 0.5) * (BLOCK_X - fpw - 1);
+        const pz = bz + (r() - 0.5) * (BLOCK_Z - fpd - 1);
+
+        // Place building at terrain height
+        const terrainY = landHeight(px, pz);
+        const matIdx = Math.floor(r() * 3);
+        const wallMat = mats[matIdx];
+
+        // Walls
+        const walls = new THREE.Mesh(boxGeo, wallMat);
+        walls.scale.set(fpw, h, fpd);
+        walls.position.set(px, ENV_GROUND_Y + terrainY + h / 2, pz);
+        group.add(walls);
+
+        // Roof box (slightly different shade)
+        if (h > 4) {
+          const roof = new THREE.Mesh(boxGeo, matRoof);
+          roof.scale.set(fpw * 0.95, 0.4, fpd * 0.95);
+          roof.position.set(px, ENV_GROUND_Y + terrainY + h + 0.2, pz);
+          group.add(roof);
+        }
+
+        // Windows: thin slab around the building, emissive at night
+        if (h > 5) {
+          const winSlab = new THREE.Mesh(boxGeo, matWin);
+          winSlab.scale.set(fpw + 0.04, h * 0.85, fpd + 0.04);
+          winSlab.position.set(px, ENV_GROUND_Y + terrainY + h / 2 + 0.2, pz);
+          group.add(winSlab);
+        }
+      }
+    }
+  }
+
+  return group;
 }
 
-// ---- Palms (instanced, simple stylized) ----
+/* ---- Distant islands (silhouettes on horizon, ocean side) ---- */
+function makeIslands() {
+  const group = new THREE.Group();
+  const islandMat = new THREE.MeshStandardMaterial({
+    color: 0x36404a,
+    roughness: 0.95,
+    flatShading: true,
+    fog: true
+  });
+
+  // 3 island silhouettes far out at sea
+  const islands = [
+    { x: -2200, z:  -400, w: 600, h: 35, d: 200 },
+    { x: -2400, z:   200, w: 380, h: 22, d: 140 },
+    { x: -2100, z:   800, w: 280, h: 18, d: 110 }
+  ];
+
+  islands.forEach(spec => {
+    // Shape: low, elongated cone-like form
+    const geo = new THREE.ConeGeometry(spec.w / 2, spec.h, 12, 4);
+    // Squash along Z
+    geo.scale(1, 1, spec.d / spec.w);
+    // Deform vertices for irregular silhouette
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const z = pos.getZ(i);
+      const heightT = (y + spec.h / 2) / spec.h;
+      const ridge = (fbm2D(x * 0.01 + spec.x * 0.001, z * 0.01, 3) - 0.5) * 12 * (1 - heightT * 0.5);
+      pos.setX(i, x + ridge * Math.sign(x || 1));
+      pos.setZ(i, z + ridge * 0.3);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+
+    const mesh = new THREE.Mesh(geo, islandMat);
+    mesh.position.set(spec.x, ENV_GROUND_Y + spec.h / 2 - 1, spec.z);
+    group.add(mesh);
+  });
+
+  return group;
+}
+
+/* ---- A few coastal palms scattered on the beach band ---- */
 function makePalms() {
   const group = new THREE.Group();
-  const PALM_COUNT = 12;
-  // Trunk material (shared)
-  const trunkMat = new THREE.MeshStandardMaterial({
-    color: 0x4a3220,
-    roughness: 0.95,
-    metalness: 0.0,
-    fog: true
-  });
-  // Frond material — flat green sprite-like plane
+  const PALM_COUNT = 8;
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3220, roughness: 0.95, flatShading: true, fog: true });
   const frondMat = new THREE.MeshStandardMaterial({
-    color: 0x4a7a3a,
-    roughness: 0.7,
-    side: THREE.DoubleSide,
-    transparent: true,
-    fog: true
+    color: 0x4a7a3a, roughness: 0.7, side: THREE.DoubleSide,
+    transparent: true, flatShading: true, fog: true
   });
 
   for (let i = 0; i < PALM_COUNT; i++) {
     const palm = new THREE.Group();
-    const trunkH = 8 + Math.random() * 5;
-    // Trunk: cylinder slightly tapered (use CylinderGeometry with different radii)
-    const trunk = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.35, 0.55, trunkH, 8),
-      trunkMat
-    );
+    const trunkH = 7 + Math.random() * 4;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, trunkH, 6), trunkMat);
     trunk.position.y = trunkH / 2;
-    // Slight bend
-    trunk.rotation.z = (Math.random() - 0.5) * 0.25;
+    trunk.rotation.z = (Math.random() - 0.5) * 0.2;
     palm.add(trunk);
 
-    // Fronds: 6-8 elongated flat planes radiating from top
-    const frondCount = 6 + Math.floor(Math.random() * 3);
+    const frondCount = 5 + Math.floor(Math.random() * 3);
     for (let f = 0; f < frondCount; f++) {
-      const frond = new THREE.Mesh(
-        new THREE.PlaneGeometry(5, 1.2),
-        frondMat
-      );
+      const frond = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 1), frondMat);
       frond.position.y = trunkH;
       const ang = (f / frondCount) * Math.PI * 2;
-      frond.position.x = Math.cos(ang) * 1.5;
-      frond.position.z = Math.sin(ang) * 1.5;
+      frond.position.x = Math.cos(ang) * 1.3;
+      frond.position.z = Math.sin(ang) * 1.3;
       frond.rotation.y = ang;
-      // Tilt fronds upward then droop outward
-      frond.rotation.x = -0.3 + Math.random() * 0.2;
-      frond.rotation.z = -0.4 - Math.random() * 0.3;
-      // Slight scale variation
-      frond.scale.set(0.85 + Math.random() * 0.4, 0.8 + Math.random() * 0.3, 1);
+      frond.rotation.x = -0.25 + Math.random() * 0.15;
+      frond.rotation.z = -0.4 - Math.random() * 0.25;
+      frond.scale.set(0.85 + Math.random() * 0.3, 0.85 + Math.random() * 0.25, 1);
       palm.add(frond);
     }
 
-    // Position palm randomly on beach (positive X-axis side, between water and inland)
-    // Beach band: 30..150 distance from origin
-    const ang = (Math.random() - 0.3) * Math.PI; // mostly facing the camera area
-    const r = 35 + Math.random() * 110;
-    palm.position.set(Math.cos(ang) * r, ENV_BEACH_Y, Math.sin(ang) * r);
-    palm.scale.setScalar(0.7 + Math.random() * 0.8);
+    // Place along beach (x=10..38, z range wide)
+    const px = 10 + Math.random() * 28;
+    const pz = (Math.random() - 0.5) * 800;
+    const terrainY = landHeight(px, pz);
+    palm.position.set(px, ENV_GROUND_Y + terrainY, pz);
+    palm.scale.setScalar(0.7 + Math.random() * 0.6);
     palm.rotation.y = Math.random() * Math.PI * 2;
     palm.userData.swayPhase = Math.random() * Math.PI * 2;
-    palm.userData.swayAmp = 0.04 + Math.random() * 0.04;
+    palm.userData.swayAmp = 0.03 + Math.random() * 0.03;
 
     group.add(palm);
   }
@@ -1836,46 +1859,38 @@ function makePalms() {
   return group;
 }
 
-// ---- Seagull boids flock ----
+/* ---- Seagulls (calmer, lower altitude) ---- */
 function makeGulls() {
   const group = new THREE.Group();
-  const GULL_COUNT = 24;
+  const GULL_COUNT = 14;
 
-  // Build gull texture once: silhouette of a bird in flight (M-shape)
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#0d0d10';
-  ctx.beginPath();
-  // M-shape bird silhouette
-  ctx.moveTo(8, 36);
-  ctx.quadraticCurveTo(20, 18, 32, 32);
-  ctx.quadraticCurveTo(44, 18, 56, 36);
-  ctx.quadraticCurveTo(44, 30, 32, 36);
-  ctx.quadraticCurveTo(20, 30, 8, 36);
-  ctx.closePath();
-  ctx.fill();
-  // Anti-alias / soften
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-
-  // Second pose (wings down) for animation
-  const c2 = document.createElement('canvas');
-  c2.width = c2.height = 64;
-  const ctx2 = c2.getContext('2d');
-  ctx2.fillStyle = '#0d0d10';
-  ctx2.beginPath();
-  ctx2.moveTo(8, 32);
-  ctx2.quadraticCurveTo(20, 42, 32, 32);
-  ctx2.quadraticCurveTo(44, 42, 56, 32);
-  ctx2.quadraticCurveTo(44, 36, 32, 34);
-  ctx2.quadraticCurveTo(20, 36, 8, 32);
-  ctx2.closePath();
-  ctx2.fill();
-  const tex2 = new THREE.CanvasTexture(c2);
-  tex2.colorSpace = THREE.SRGBColorSpace;
-
-  const gullTextures = [tex, tex2];
+  // Two-pose silhouette texture (wings up / wings down)
+  function makeGullTex(wingsUp) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#1a1a1e';
+    ctx.beginPath();
+    if (wingsUp) {
+      ctx.moveTo(8, 36);
+      ctx.quadraticCurveTo(20, 18, 32, 32);
+      ctx.quadraticCurveTo(44, 18, 56, 36);
+      ctx.quadraticCurveTo(44, 30, 32, 36);
+      ctx.quadraticCurveTo(20, 30, 8, 36);
+    } else {
+      ctx.moveTo(8, 32);
+      ctx.quadraticCurveTo(20, 40, 32, 32);
+      ctx.quadraticCurveTo(44, 40, 56, 32);
+      ctx.quadraticCurveTo(44, 35, 32, 33);
+      ctx.quadraticCurveTo(20, 35, 8, 32);
+    }
+    ctx.closePath();
+    ctx.fill();
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+  const gullTextures = [makeGullTex(true), makeGullTex(false)];
 
   for (let i = 0; i < GULL_COUNT; i++) {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -1885,63 +1900,97 @@ function makeGulls() {
       depthWrite: false,
       fog: true
     }));
-    sprite.scale.set(2.5, 2.5, 1);
-    // Random initial position in a flock cloud
+    sprite.scale.set(2.0, 2.0, 1);
+    // Real gull altitude: typically 5-30m above sea level when foraging
+    // Our scale: ENV_GROUND_Y = -25, so sea level = -25. Gulls at y = -22..-5 (3-20 units above sea)
     sprite.position.set(
-      (Math.random() - 0.5) * 200,
-      30 + Math.random() * 25,
-      (Math.random() - 0.5) * 200
+      -50 - Math.random() * 200,           // mostly over water
+      ENV_GROUND_Y + 4 + Math.random() * 14, // 4-18 units above sea
+      (Math.random() - 0.5) * 250
     );
     sprite.userData.vel = new THREE.Vector3(
-      (Math.random() - 0.5) * 6,
-      (Math.random() - 0.5) * 1,
-      (Math.random() - 0.5) * 6
+      (Math.random() - 0.5) * 3,
+      (Math.random() - 0.5) * 0.4,
+      (Math.random() - 0.5) * 3
     );
     sprite.userData.flapPhase = Math.random() * Math.PI * 2;
-    sprite.userData.flapSpeed = 4 + Math.random() * 3;
+    sprite.userData.flapSpeed = 1.8 + Math.random() * 1.2; // slower flaps (was 4-7)
     group.add(sprite);
   }
   group.userData.textures = gullTextures;
   return group;
 }
 
+/* ---- Single airplane that crosses waypoints every 3s ---- */
+function makePlane() {
+  const group = new THREE.Group();
+
+  // Lowpoly plane: fuselage cylinder, two wings, two tail fins
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xeeeef0, roughness: 0.5, flatShading: true, fog: true });
+  const accentMat = new THREE.MeshStandardMaterial({ color: 0x2860a8, roughness: 0.5, flatShading: true, fog: true });
+
+  // Fuselage: along Z axis (so plane "noses" -Z by default)
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 0.8, 14, 8), bodyMat);
+  body.rotation.x = Math.PI / 2;
+  group.add(body);
+
+  // Nose cone
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(1.2, 3, 8), bodyMat);
+  nose.rotation.x = -Math.PI / 2;
+  nose.position.z = -8.5;
+  group.add(nose);
+
+  // Wings
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(20, 0.5, 4), bodyMat);
+  wing.position.set(0, -0.2, 1);
+  group.add(wing);
+
+  // Wing accent stripe
+  const wingStripe = new THREE.Mesh(new THREE.BoxGeometry(20, 0.6, 1), accentMat);
+  wingStripe.position.set(0, -0.15, 2);
+  group.add(wingStripe);
+
+  // Vertical tail
+  const vtail = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.5, 3), bodyMat);
+  vtail.position.set(0, 1.5, 6);
+  group.add(vtail);
+
+  // Horizontal tail
+  const htail = new THREE.Mesh(new THREE.BoxGeometry(7, 0.3, 2), bodyMat);
+  htail.position.set(0, 0.6, 6.2);
+  group.add(htail);
+
+  // Body stripe
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 14), accentMat);
+  stripe.position.set(0, 1.1, 0);
+  group.add(stripe);
+
+  // Initial position (somewhere in sky)
+  group.position.set(0, 60, 200);
+
+  group.userData.fromPos = group.position.clone();
+  group.userData.toPos = group.position.clone();
+  group.userData.tStart = -1;
+  group.userData.duration = 3.0;
+
+  return group;
+}
+
 // ---- Build & add environment ----
-const beachMesh = makeBeach();
-scene.add(beachMesh);
+const terrainMesh = makeTerrain();
+scene.add(terrainMesh);
 const oceanMesh = makeOcean();
 scene.add(oceanMesh);
-const mountainMesh = makeMountain();
-scene.add(mountainMesh);
+const cityGroup = makeCity();
+scene.add(cityGroup);
+const islandsGroup = makeIslands();
+scene.add(islandsGroup);
 const palmsGroup = makePalms();
 scene.add(palmsGroup);
 const gullsGroup = makeGulls();
 scene.add(gullsGroup);
-
-// Scale reference label sprite (text on canvas) showing "200m" at mountain peak
-function makeLabel(text) {
-  const c = document.createElement('canvas');
-  c.width = 256; c.height = 64;
-  const ctx = c.getContext('2d');
-  ctx.font = 'bold 28px monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(40, 14, 176, 36);
-  ctx.strokeStyle = '#00d2ff';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(40, 14, 176, 36);
-  ctx.fillStyle = '#00d2ff';
-  ctx.fillText(text, 128, 32);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, fog: true });
-  const sprite = new THREE.Sprite(mat);
-  sprite.scale.set(60, 15, 1);
-  return sprite;
-}
-const peakLabel = makeLabel('▲ 200m REF');
-peakLabel.position.set(700, ENV_GROUND_Y + ENV_MOUNTAIN_HEIGHT + 18, -300);
-scene.add(peakLabel);
+const planeMesh = makePlane();
+scene.add(planeMesh);
 
 /* =====================================================
    4b. TIME-OF-DAY SYSTEM
@@ -2071,17 +2120,19 @@ function setTimeOfDay(hours) {
   scene.fog.density = s.fogD;
 
   // Update env shader fog uniforms (each material has its own copy of fog refs)
-  if (typeof beachMesh !== 'undefined' && beachMesh) {
-    beachMesh.material.uniforms.uFogColor.value.copy(scene.fog.color);
-    beachMesh.material.uniforms.uFogDensity.value = scene.fog.density;
-  }
+  // Update env shader fog uniforms (only ocean has a custom shader now;
+  // terrain/buildings/islands use MeshStandardMaterial which handles fog automatically)
   if (typeof oceanMesh !== 'undefined' && oceanMesh) {
     oceanMesh.material.uniforms.uFogColor.value.copy(scene.fog.color);
     oceanMesh.material.uniforms.uFogDensity.value = scene.fog.density;
   }
-  if (typeof mountainMesh !== 'undefined' && mountainMesh) {
-    mountainMesh.material.uniforms.uFogColor.value.copy(scene.fog.color);
-    mountainMesh.material.uniforms.uFogDensity.value = scene.fog.density;
+
+  // City window glow at night
+  if (typeof cityGroup !== 'undefined' && cityGroup && cityGroup.userData.windowMat) {
+    // Lights ramp on as sun goes down
+    const isDark = Math.max(0, Math.min(1, (-sd.y + 0.1) * 2.5));
+    cityGroup.userData.windowMat.emissiveIntensity = isDark * 1.3;
+    envUniforms.uCityLights.value = isDark;
   }
 
   // Cloud lighting palette
@@ -2103,11 +2154,8 @@ function setTimeOfDay(hours) {
   else if (timeOfDay > 19.5) starOp = (timeOfDay - 19.5) / 1.0 * 0.9;
   stars.material.opacity = Math.max(0, Math.min(0.9, starOp));
 
-  // Update existing cloud lighting
-  if (currentCloudGroup) {
-    if (currentCloudGroup.userData.isField) updateCloudLightingDeep(currentCloudGroup);
-    else updateCloudLighting(currentCloudGroup);
-  }
+  // Update existing cloud lighting (always deep-walk now since single mode has companion sub-groups)
+  if (currentCloudGroup) updateCloudLightingDeep(currentCloudGroup);
   if (quizCloudGroup) updateCloudLighting(quizCloudGroup);
 }
 
@@ -2327,8 +2375,44 @@ function buildCloud(typeKey, densityMultiplier = 1.0) {
 
   scene.add(group);
   currentCloudGroup = group;
-  updateCloudLighting(group);
+
+  // Add horizon companions: smaller versions of same cloud type scattered far away
+  // so the sky doesn't feel empty. Skip for sheet/dense types that already fill the sky.
+  if (!def.sheet && def.abbr !== 'Cb') {
+    addHorizonCompanions(group, def, tex, baseHeight);
+  }
+
+  updateCloudLightingDeep(group);
   return group;
+}
+
+// Adds 6-10 distant smaller cloud clumps around the main formation, populating the horizon.
+function addHorizonCompanions(parent, def, tex, baseHeight) {
+  const COMPANION_COUNT = (def.fibrous || def.grid) ? 10 : 8;
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  // Seed deterministically per cloud type for stability
+  let rng = (def.abbr.charCodeAt(0) * 71 + def.abbr.charCodeAt(1) * 41) & 0xffff;
+  const r = () => { rng = (rng * 1664525 + 1013904223) & 0xffffffff; return ((rng >>> 0) / 4294967295); };
+
+  for (let i = 0; i < COMPANION_COUNT; i++) {
+    // Position: ring 280..600 units from origin (well outside main cloud's local bounds)
+    const dist = 280 + r() * 320;
+    const ang = i * golden + r() * 0.5;
+    const px = Math.cos(ang) * dist;
+    const pz = Math.sin(ang) * dist;
+    const py = (r() - 0.5) * 8;
+
+    // Smaller per-companion density
+    const sub = buildSingleClump(def, tex, 0.18 + r() * 0.15, i * 23.7);
+    sub.position.set(px, py, pz);
+    // Smaller scale for distance-feel
+    const s = 0.45 + r() * 0.5;
+    sub.scale.setScalar(s);
+    sub.rotation.y = r() * Math.PI * 2;
+    sub.userData.isCompanion = true;
+    sub.userData.homePos = sub.position.clone();
+    parent.add(sub);
+  }
 }
 
 function etageBaseHeight(def) {
@@ -2664,25 +2748,26 @@ function updateGulls(dt, elapsed) {
   const gulls = gullsGroup.children;
   const N = gulls.length;
   if (N === 0) return;
-  // Boid parameters
-  const COHESION_R = 28;
-  const SEPARATION_R = 10;
-  const ALIGN_R = 22;
-  const COHESION_W = 0.6;
-  const SEPARATION_W = 1.6;
-  const ALIGN_W = 0.5;
-  const MAX_SPEED = 14;
-  const MIN_SPEED = 5;
-  const BOUND_RADIUS = 180;
-  const BOUND_Y_MIN = 22;
-  const BOUND_Y_MAX = 65;
+  // Boid parameters — calmer flock
+  const COHESION_R = 22;
+  const SEPARATION_R = 7;
+  const ALIGN_R = 18;
+  const COHESION_W = 0.5;
+  const SEPARATION_W = 1.4;
+  const ALIGN_W = 0.4;
+  const MAX_SPEED = 6;     // was 14 — much calmer
+  const MIN_SPEED = 2.5;   // was 5
+  const BOUND_RADIUS = 220;
+  // Real seagull altitude when foraging: ~5-30m above sea (sea level = ENV_GROUND_Y = -25)
+  // → world y range: -22..-5 (3 to 20 units above sea)
+  const BOUND_Y_MIN = ENV_GROUND_Y + 3;   // -22
+  const BOUND_Y_MAX = ENV_GROUND_Y + 20;  // -5
 
   for (let i = 0; i < N; i++) {
     const g = gulls[i];
     const pos = g.position;
     const vel = g.userData.vel;
 
-    // Reset accumulators
     const cohesion = _v0.set(0, 0, 0);
     const separation = _v1.set(0, 0, 0);
     const alignment = _v2.set(0, 0, 0);
@@ -2708,7 +2793,6 @@ function updateGulls(dt, elapsed) {
         alignN++;
       }
       if (distSq < SEPARATION_R * SEPARATION_R && distSq > 0.01) {
-        // Push away inversely proportional to distance
         const inv = 1.0 / Math.sqrt(distSq);
         separation.x -= dx * inv;
         separation.y -= dy * inv;
@@ -2717,55 +2801,89 @@ function updateGulls(dt, elapsed) {
       }
     }
 
-    // Steer toward cohesion center
     if (cohesionN > 0) {
-      cohesion.divideScalar(cohesionN).sub(pos).multiplyScalar(0.04 * COHESION_W);
+      cohesion.divideScalar(cohesionN).sub(pos).multiplyScalar(0.025 * COHESION_W);
       vel.add(cohesion);
     }
-    // Match alignment
     if (alignN > 0) {
-      alignment.divideScalar(alignN).sub(vel).multiplyScalar(0.05 * ALIGN_W);
+      alignment.divideScalar(alignN).sub(vel).multiplyScalar(0.03 * ALIGN_W);
       vel.add(alignment);
     }
-    // Separation push
     if (sepN > 0) {
-      separation.multiplyScalar(SEPARATION_W * 0.6);
+      separation.multiplyScalar(SEPARATION_W * 0.4);
       vel.add(separation);
     }
 
-    // Bounds: gentle pull toward center if outside radius
+    // Pull toward area over water (negative X), since gulls forage there
+    if (pos.x > 50) vel.x -= 0.3;
+
+    // Bounds
     const distXZ = Math.hypot(pos.x, pos.z);
     if (distXZ > BOUND_RADIUS) {
-      const inward = _v3.set(-pos.x, 0, -pos.z).normalize().multiplyScalar(0.6);
+      const inward = _v3.set(-pos.x, 0, -pos.z).normalize().multiplyScalar(0.4);
       vel.add(inward);
     }
-    // Vertical bounds
-    if (pos.y < BOUND_Y_MIN) vel.y += 0.4;
-    else if (pos.y > BOUND_Y_MAX) vel.y -= 0.4;
+    if (pos.y < BOUND_Y_MIN) vel.y += 0.25;
+    else if (pos.y > BOUND_Y_MAX) vel.y -= 0.25;
+    // Damp vertical velocity so they don't oscillate wildly
+    vel.y *= 0.96;
 
-    // Clamp speed
     const speed = vel.length();
     if (speed > MAX_SPEED) vel.multiplyScalar(MAX_SPEED / speed);
     else if (speed < MIN_SPEED) vel.multiplyScalar(MIN_SPEED / Math.max(0.01, speed));
 
-    // Apply velocity
     pos.x += vel.x * dt;
     pos.y += vel.y * dt;
     pos.z += vel.z * dt;
 
-    // Wing flap: swap texture every half-flap
+    // Flap (slower, more subtle)
     const flapVal = Math.sin(elapsed * g.userData.flapSpeed + g.userData.flapPhase);
     const desiredTex = gullsGroup.userData.textures[flapVal > 0 ? 0 : 1];
     if (g.material.map !== desiredTex) {
       g.material.map = desiredTex;
       g.material.needsUpdate = true;
     }
-
-    // Subtle scale pulse based on flap (gives the impression of wing extension)
-    const s = 2.5 * (1.0 + flapVal * 0.08);
+    const s = 2.0 * (1.0 + flapVal * 0.04); // smaller pulse
     g.scale.set(s, s * 0.6, 1);
   }
 }
+
+/* ---- Plane: picks a new waypoint every 3s, lerps smoothly toward it ---- */
+function updatePlane(dt, elapsed) {
+  if (!planeMesh) return;
+  const ud = planeMesh.userData;
+
+  // Time to pick a new waypoint?
+  if (ud.tStart < 0 || elapsed - ud.tStart >= ud.duration) {
+    ud.fromPos.copy(planeMesh.position);
+    // New waypoint: 300-800 units from origin (in arbitrary direction in horizontal plane)
+    // 1 unit ≈ 1 meter for our scene scale
+    const dist = 300 + Math.random() * 500;
+    const ang = Math.random() * Math.PI * 2;
+    const altY = 35 + Math.random() * 60; // 60..120 above sea level — typical small-plane low cruise
+    ud.toPos.set(Math.cos(ang) * dist, ENV_GROUND_Y + altY, Math.sin(ang) * dist);
+    ud.tStart = elapsed;
+    ud.duration = 3.0;
+  }
+
+  const t = Math.min(1, (elapsed - ud.tStart) / ud.duration);
+  // Smooth ease so the plane doesn't jerk at waypoints
+  const ts = t * t * (3 - 2 * t);
+  planeMesh.position.lerpVectors(ud.fromPos, ud.toPos, ts);
+
+  // Orient plane toward direction of travel
+  const dir = _v0.subVectors(ud.toPos, ud.fromPos);
+  if (dir.lengthSq() > 0.01) {
+    // Plane's nose is -Z (see makePlane), so face the velocity direction
+    const angle = Math.atan2(dir.x, dir.z) + Math.PI;
+    planeMesh.rotation.y = angle;
+    // Bank slightly into turns based on horizontal-direction change rate
+    // (use a small amount of pitch from vertical change too)
+    const pitchTarget = -Math.atan2(dir.y, Math.hypot(dir.x, dir.z)) * 0.6;
+    planeMesh.rotation.x = pitchTarget;
+  }
+}
+
 
 function animate() {
   const dt = Math.min(clock.getDelta(), 0.1);
@@ -2789,6 +2907,9 @@ function animate() {
   if (gullsGroup) {
     updateGulls(dt, elapsed);
   }
+
+  // Plane waypoint navigation
+  updatePlane(dt, elapsed);
 
   // Wind vector in scene (normalize: dir 0 = north = -Z, 90 = east = +X)
   const dirRad = (windDir + 180) * Math.PI / 180; // wind FROM dir → moves TO opposite
@@ -2816,19 +2937,36 @@ function animate() {
         obj.position.y = obj.userData.basePos.y + Math.sin(elapsed * 0.5 + obj.userData.bobPhase) * obj.userData.bobAmp;
       });
     } else {
-      // Single mode: per-sprite drift + wrap as before
-      currentCloudGroup.traverse(obj => {
-        if (!obj.isSprite || !obj.userData.basePos) return;
-        const sprite = obj;
-        sprite.position.x += windVx * dt + sprite.userData.driftX * dt * 0.4;
-        sprite.position.z += windVz * dt + sprite.userData.driftZ * dt * 0.4;
-        sprite.position.y = sprite.userData.basePos.y + Math.sin(elapsed * 0.5 + sprite.userData.bobPhase) * sprite.userData.bobAmp;
-
-        const wrap = 250;
-        if (sprite.position.x > wrap) { sprite.position.x -= wrap * 2; sprite.userData.basePos.x -= wrap * 2; }
-        if (sprite.position.x < -wrap) { sprite.position.x += wrap * 2; sprite.userData.basePos.x += wrap * 2; }
-        if (sprite.position.z > wrap) { sprite.position.z -= wrap * 2; sprite.userData.basePos.z -= wrap * 2; }
-        if (sprite.position.z < -wrap) { sprite.position.z += wrap * 2; sprite.userData.basePos.z += wrap * 2; }
+      // Single mode: per-sprite drift + wrap as before, but skip sprites inside companion groups
+      // (those drift as whole groups, see below)
+      const COMPANION_WRAP = 800;
+      currentCloudGroup.children.forEach(child => {
+        if (child.isGroup && child.userData.isCompanion) {
+          // Drift the whole companion group
+          child.position.x += windVx * dt * 0.6;
+          child.position.z += windVz * dt * 0.6;
+          if (child.position.x > COMPANION_WRAP) child.position.x -= COMPANION_WRAP * 2;
+          if (child.position.x < -COMPANION_WRAP) child.position.x += COMPANION_WRAP * 2;
+          if (child.position.z > COMPANION_WRAP) child.position.z -= COMPANION_WRAP * 2;
+          if (child.position.z < -COMPANION_WRAP) child.position.z += COMPANION_WRAP * 2;
+          // Bob the sprites inside (but no individual drift)
+          child.traverse(obj => {
+            if (!obj.isSprite || !obj.userData.basePos) return;
+            obj.position.y = obj.userData.basePos.y + Math.sin(elapsed * 0.5 + obj.userData.bobPhase) * obj.userData.bobAmp;
+          });
+          return;
+        }
+        if (child.isSprite && child.userData.basePos) {
+          // Main-cloud sprite: original per-sprite drift + wrap
+          child.position.x += windVx * dt + child.userData.driftX * dt * 0.4;
+          child.position.z += windVz * dt + child.userData.driftZ * dt * 0.4;
+          child.position.y = child.userData.basePos.y + Math.sin(elapsed * 0.5 + child.userData.bobPhase) * child.userData.bobAmp;
+          const wrap = 250;
+          if (child.position.x > wrap) { child.position.x -= wrap * 2; child.userData.basePos.x -= wrap * 2; }
+          if (child.position.x < -wrap) { child.position.x += wrap * 2; child.userData.basePos.x += wrap * 2; }
+          if (child.position.z > wrap) { child.position.z -= wrap * 2; child.userData.basePos.z -= wrap * 2; }
+          if (child.position.z < -wrap) { child.position.z += wrap * 2; child.userData.basePos.z += wrap * 2; }
+        }
       });
     }
 
@@ -2860,7 +2998,7 @@ function animate() {
     else if (def.etage === 'Vertical') baseCamY = camState.height + 4;
     camera.position.x = Math.sin(az) * camState.radius;
     camera.position.z = Math.cos(az) * camState.radius;
-    camera.position.y = Math.max(-18, baseCamY + Math.sin(elapsed * 0.2) * 1.5);
+    camera.position.y = Math.max(ENV_GROUND_Y + 8, baseCamY + Math.sin(elapsed * 0.2) * 1.5);
     camera.lookAt(0, focusY, 0);
 
     // Update compass — show camera bearing relative to north (-Z)
