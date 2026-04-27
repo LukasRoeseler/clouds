@@ -1381,7 +1381,9 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x0a121e, 0.0008);
+// Linear fog with explicit near/far — much easier to reason about than FogExp2
+// near=1500: nothing closer is fogged, far=9000: everything beyond is full horizon color
+scene.fog = new THREE.Fog(0x0a121e, 1500, 9000);
 
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 12000);
 camera.position.set(0, 18, 220);
@@ -1873,7 +1875,8 @@ function makeOcean() {
       uAmbient: envUniforms.uAmbient,
       uAmbientI: envUniforms.uAmbientI,
       uFogColor: { value: scene.fog.color },
-      uFogDensity: { value: scene.fog.density }
+      uFogNear: { value: scene.fog.near },
+      uFogFar:  { value: scene.fog.far }
     },
     vertexShader: /* glsl */`
       uniform float uTime;
@@ -1914,7 +1917,8 @@ function makeOcean() {
       uniform float uAmbientI;
       uniform vec3 uHorizon;
       uniform vec3 uFogColor;
-      uniform float uFogDensity;
+      uniform float uFogNear;
+      uniform float uFogFar;
       varying vec3 vWorldPos;
       varying vec3 vNormal;
 
@@ -1952,7 +1956,7 @@ function makeOcean() {
         vec3 col = diffuse + glint + fresColor + vec3(foam);
 
         float dist = length(vWorldPos - cameraPosition);
-        float fogFactor = 1.0 - exp(-uFogDensity * dist * dist);
+        float fogFactor = smoothstep(uFogNear, uFogFar, length(vWorldPos - cameraPosition));
         col = mix(col, uFogColor, clamp(fogFactor, 0.0, 1.0));
 
         gl_FragColor = vec4(col, 0.95);
@@ -2336,24 +2340,24 @@ function lerpColor(a, b, t, out) {
 
 const SKY_KEYS = [
   // Deep night
-  { h: 0,  top: 0x020610, horizon: 0x0a1428, ground: 0x000308, sun: 0x202840, ambient: 0x101830, sunI: 0.0, ambI: 0.18, fogD: 0.0011 },
+  { h: 0,  top: 0x020610, horizon: 0x0a1428, ground: 0x000308, sun: 0x202840, ambient: 0x101830, sunI: 0.0, ambI: 0.18, fogNear: 1200, fogFar: 7000 },
   // Pre-dawn
-  { h: 5,  top: 0x081428, horizon: 0x2a2840, ground: 0x080a14, sun: 0x402840, ambient: 0x1a2030, sunI: 0.05, ambI: 0.22, fogD: 0.0012 },
+  { h: 5,  top: 0x081428, horizon: 0x2a2840, ground: 0x080a14, sun: 0x402840, ambient: 0x1a2030, sunI: 0.05, ambI: 0.22, fogNear: 1000, fogFar: 6000 },
   // Sunrise (warm orange/pink)
-  { h: 6.5,top: 0x4a5478, horizon: 0xff9966, ground: 0x281a18, sun: 0xffaa55, ambient: 0x6a4a4a, sunI: 0.7, ambI: 0.45, fogD: 0.0013 },
+  { h: 6.5,top: 0x4a5478, horizon: 0xff9966, ground: 0x281a18, sun: 0xffaa55, ambient: 0x6a4a4a, sunI: 0.7, ambI: 0.45, fogNear: 900, fogFar: 5500 },
   // Morning
-  { h: 9,  top: 0x2870c8, horizon: 0xa8d0ee, ground: 0x182838, sun: 0xfff0d0, ambient: 0x90a8c0, sunI: 1.05, ambI: 0.62, fogD: 0.00088 },
+  { h: 9,  top: 0x2870c8, horizon: 0xa8d0ee, ground: 0x182838, sun: 0xfff0d0, ambient: 0x90a8c0, sunI: 1.05, ambI: 0.62, fogNear: 1500, fogFar: 90008 },
   // Midday (clear blue)
-  { h: 13, top: 0x1a5fb8, horizon: 0xb8d8f0, ground: 0x182838, sun: 0xffffee, ambient: 0xa0b8d0, sunI: 1.2, ambI: 0.7, fogD: 0.0008 },
+  { h: 13, top: 0x1a5fb8, horizon: 0xb8d8f0, ground: 0x182838, sun: 0xffffee, ambient: 0xa0b8d0, sunI: 1.2, ambI: 0.7, fogNear: 1500, fogFar: 9000 },
   // Afternoon
-  { h: 16, top: 0x2068c0, horizon: 0xc0d8ee, ground: 0x182838, sun: 0xfff4d0, ambient: 0xa0b0c8, sunI: 1.1, ambI: 0.65, fogD: 0.00088 },
+  { h: 16, top: 0x2068c0, horizon: 0xc0d8ee, ground: 0x182838, sun: 0xfff4d0, ambient: 0xa0b0c8, sunI: 1.1, ambI: 0.65, fogNear: 1500, fogFar: 90008 },
   // Sunset (golden)
-  { h: 18.5, top: 0x8a5a78, horizon: 0xff7a3a, ground: 0x2a1818, sun: 0xff8848, ambient: 0x80505a, sunI: 0.85, ambI: 0.5, fogD: 0.0013 },
+  { h: 18.5, top: 0x8a5a78, horizon: 0xff7a3a, ground: 0x2a1818, sun: 0xff8848, ambient: 0x80505a, sunI: 0.85, ambI: 0.5, fogNear: 900, fogFar: 5500 },
   // Dusk (purple)
-  { h: 20, top: 0x202850, horizon: 0x4a3458, ground: 0x10101c, sun: 0x603858, ambient: 0x303048, sunI: 0.15, ambI: 0.28, fogD: 0.0012 },
+  { h: 20, top: 0x202850, horizon: 0x4a3458, ground: 0x10101c, sun: 0x603858, ambient: 0x303048, sunI: 0.15, ambI: 0.28, fogNear: 1000, fogFar: 6000 },
   // Night
-  { h: 22, top: 0x040820, horizon: 0x101830, ground: 0x000308, sun: 0x202840, ambient: 0x141a2a, sunI: 0.0, ambI: 0.2, fogD: 0.0011 },
-  { h: 24, top: 0x020610, horizon: 0x0a1428, ground: 0x000308, sun: 0x202840, ambient: 0x101830, sunI: 0.0, ambI: 0.18, fogD: 0.0011 },
+  { h: 22, top: 0x040820, horizon: 0x101830, ground: 0x000308, sun: 0x202840, ambient: 0x141a2a, sunI: 0.0, ambI: 0.2, fogNear: 1200, fogFar: 7000 },
+  { h: 24, top: 0x020610, horizon: 0x0a1428, ground: 0x000308, sun: 0x202840, ambient: 0x101830, sunI: 0.0, ambI: 0.18, fogNear: 1200, fogFar: 7000 },
 ];
 
 const _tmpA = new THREE.Color(), _tmpB = new THREE.Color();
@@ -2376,7 +2380,8 @@ function sampleSky(h) {
     ambient: lerpColor(_tmpA.setHex(a.ambient), _tmpB.setHex(b.ambient), ts, new THREE.Color()),
     sunI: a.sunI + (b.sunI - a.sunI) * ts,
     ambI: a.ambI + (b.ambI - a.ambI) * ts,
-    fogD: a.fogD + (b.fogD - a.fogD) * ts,
+    fogNear: a.fogNear + (b.fogNear - a.fogNear) * ts,
+    fogFar:  a.fogFar  + (b.fogFar  - a.fogFar) * ts,
   };
 }
 
@@ -2441,14 +2446,15 @@ function setTimeOfDay(hours) {
 
   // Fog: tinted to MATCH the sky's horizon color so distant geometry blends seamlessly
   scene.fog.color.copy(s.horizon);
-  scene.fog.density = s.fogD;
+  scene.fog.near = s.fogNear;
+  scene.fog.far = s.fogFar;
 
-  // Update env shader fog uniforms (each material has its own copy of fog refs)
   // Update env shader fog uniforms (only ocean has a custom shader now;
   // terrain/buildings/islands use MeshStandardMaterial which handles fog automatically)
   if (typeof oceanMesh !== 'undefined' && oceanMesh) {
     oceanMesh.material.uniforms.uFogColor.value.copy(scene.fog.color);
-    oceanMesh.material.uniforms.uFogDensity.value = scene.fog.density;
+    oceanMesh.material.uniforms.uFogNear.value = scene.fog.near;
+    oceanMesh.material.uniforms.uFogFar.value = scene.fog.far;
   }
 
   // City window glow at night
