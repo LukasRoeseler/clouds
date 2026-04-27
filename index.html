@@ -995,14 +995,6 @@
       </div>
     </div>
 
-    <div class="field">
-      <label>Scene Mode</label>
-      <div class="segmented" id="mode-toggle">
-        <button data-mode="single" class="active">◉ Single</button>
-        <button data-mode="field">⋮⋮ Field</button>
-      </div>
-    </div>
-
     <div class="btn-row" style="margin-bottom: 6px;">
       <button id="btn-randomize" class="primary">⟳ Randomize</button>
     </div>
@@ -1090,13 +1082,6 @@
           <label>Genus (WMO)</label>
           <div class="select-wrap">
             <select id="m-cloud-select"></select>
-          </div>
-        </div>
-        <div class="field">
-          <label>Scene Mode</label>
-          <div class="segmented" id="m-mode-toggle">
-            <button data-mode="single" class="active">◉ Single</button>
-            <button data-mode="field">⋮⋮ Field</button>
           </div>
         </div>
         <div class="btn-row" style="margin-bottom: 6px;">
@@ -1396,9 +1381,9 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x0a121e, 0.0035);
+scene.fog = new THREE.FogExp2(0x0a121e, 0.0008);
 
-const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 6000);
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 12000);
 camera.position.set(0, 18, 220);
 camera.lookAt(0, 10, 0);
 
@@ -1424,7 +1409,7 @@ const skyUniforms = {
   uMoonIntensity:{ value: 0.0 }
 };
 
-const skyGeo = new THREE.SphereGeometry(4000, 48, 32);
+const skyGeo = new THREE.SphereGeometry(8000, 48, 32);
 const skyMat = new THREE.ShaderMaterial({
   uniforms: skyUniforms,
   side: THREE.BackSide,
@@ -1525,6 +1510,10 @@ scene.add(stars);
 const ENV_GROUND_Y = -25;        // sea level
 const ENV_BEACH_Y  = ENV_GROUND_Y + 0.6;
 
+/* SCENE SCALE — 1 scene unit = 5 meters. Keeps all altitudes consistent. */
+const SCENE_SCALE_M = 5;
+const FT_TO_UNITS = 0.3048 / SCENE_SCALE_M;  // ft → scene units factor
+
 // Convention: +X = inland (east), -X = ocean (west). Coastline runs along Z axis around x≈0.
 // Camera/cloud focus is at origin, so we get coast ahead and city behind.
 
@@ -1546,20 +1535,20 @@ const envUniforms = {
 */
 function landHeight(x, z) {
   if (x < 0) return -2.0; // ocean floor
-  // Beach band: 0..40 units inland, mostly flat
-  const beachT = Math.min(1, x / 40);
-  const beach = beachT * 1.2;
-  // City band: 40..800 — gentle rise, slight noise bumps
-  const cityT = Math.min(1, Math.max(0, (x - 40) / 760));
+  // Beach band: 0..80 units (~400m wide beach)
+  const beachT = Math.min(1, x / 80);
+  const beach = beachT * 1.5;
+  // City band: 80..820
+  const cityT = Math.min(1, Math.max(0, (x - 80) / 740));
   const city = cityT * 5.0 + (fbm2D(x * 0.008, z * 0.008, 3) - 0.5) * 2.5;
-  // Forest belt: 800..1100, slight uphill
-  const forestT = Math.min(1, Math.max(0, (x - 800) / 300));
+  // Forest belt: 820..1140
+  const forestT = Math.min(1, Math.max(0, (x - 820) / 320));
   const forest = forestT * 8.0 + (fbm2D(x * 0.01, z * 0.01, 3) - 0.5) * 3;
-  // Foothills band: 1100..1700
-  const hillT = Math.min(1, Math.max(0, (x - 1100) / 600));
+  // Foothills: 1140..1740
+  const hillT = Math.min(1, Math.max(0, (x - 1140) / 600));
   const hills = hillT * hillT * 35 + (fbm2D(x * 0.005, z * 0.005, 4) - 0.5) * 18 * hillT;
-  // Mountain band: 1700+
-  const mtT = Math.max(0, (x - 1700) / 800);
+  // Mountains: 1740+
+  const mtT = Math.max(0, (x - 1740) / 800);
   const mountains = mtT * 80 + (fbm2D(x * 0.004, z * 0.003, 5) - 0.5) * 40 * Math.min(1, mtT);
   return beach + city + hills + forest + mountains;
 }
@@ -1568,8 +1557,8 @@ function landHeight(x, z) {
 function makeTerrain() {
   const SIZE_X = 5500;
   const SIZE_Z = 5500;
-  const SEG_X = 220;
-  const SEG_Z = 180;
+  const SEG_X = 140;
+  const SEG_Z = 110;
   const geo = new THREE.PlaneGeometry(SIZE_X, SIZE_Z, SEG_X, SEG_Z);
   geo.rotateX(-Math.PI / 2);
   // Center plane so positive X extends inland: shift +X by half size
@@ -1630,29 +1619,28 @@ function bakeTerrainTexture(SIZE_X, SIZE_Z) {
   const wScale = RES / SIZE_X;
 
   // ---- Background bands (rough fills) ----
-  // Ocean (x < 0): muted teal — though water mesh covers it, just for safety
   ctx.fillStyle = '#142838';
   ctx.fillRect(0, 0, wx2px(0), RES);
 
-  // Beach (0..40): warm sand
+  // Beach (0..80): warm sand — wider beach
   ctx.fillStyle = '#e3cf95';
-  ctx.fillRect(wx2px(0), 0, wx2px(40) - wx2px(0), RES);
+  ctx.fillRect(wx2px(0), 0, wx2px(80) - wx2px(0), RES);
 
-  // City ground (40..800): asphalt grey
+  // City ground (80..820): asphalt grey
   ctx.fillStyle = '#7a7468';
-  ctx.fillRect(wx2px(40), 0, wx2px(800) - wx2px(40), RES);
+  ctx.fillRect(wx2px(80), 0, wx2px(820) - wx2px(80), RES);
 
-  // Forest belt (800..1100): dark green
+  // Forest belt (820..1140): dark green
   ctx.fillStyle = '#3a5630';
-  ctx.fillRect(wx2px(800), 0, wx2px(1100) - wx2px(800), RES);
+  ctx.fillRect(wx2px(820), 0, wx2px(1140) - wx2px(820), RES);
 
-  // Foothills (1100..1700): chaparral
+  // Foothills (1140..1740): chaparral
   ctx.fillStyle = '#8a7a4c';
-  ctx.fillRect(wx2px(1100), 0, wx2px(1700) - wx2px(1100), RES);
+  ctx.fillRect(wx2px(1140), 0, wx2px(1740) - wx2px(1140), RES);
 
-  // Mountains (1700+): rocky brown
+  // Mountains (1740+): rocky brown
   ctx.fillStyle = '#6e5a4c';
-  ctx.fillRect(wx2px(1700), 0, RES, RES);
+  ctx.fillRect(wx2px(1740), 0, RES, RES);
 
   // ---- Procedural noise overlay (paint patches with vary in each band) ----
   // We sample fbm at coarse + fine scale and color-jitter
@@ -1667,13 +1655,13 @@ function bakeTerrainTexture(SIZE_X, SIZE_Z) {
       let r = data[i], g = data[i + 1], b = data[i + 2];
 
       // Beach: small noise → wet vs dry sand
-      if (wx >= 0 && wx < 40) {
+      if (wx >= 0 && wx < 80) {
         const wet = fbm2D(wx * 0.08, wz * 0.08, 3);
         const blend = wet * 60;
         r += blend - 30; g += blend - 30; b += (blend - 30) * 0.7;
         // Wet edge near water
-        if (wx < 8) {
-          const t = wx / 8;
+        if (wx < 14) {
+          const t = wx / 14;
           r = r * t + 0x60 * (1 - t);
           g = g * t + 0x70 * (1 - t);
           b = b * t + 0x70 * (1 - t);
@@ -1681,23 +1669,21 @@ function bakeTerrainTexture(SIZE_X, SIZE_Z) {
       }
 
       // City: mix grass parks + asphalt + occasional building shadows
-      if (wx >= 40 && wx < 800) {
+      if (wx >= 80 && wx < 820) {
         const park = fbm2D(wx * 0.012, wz * 0.012, 3);
         if (park > 0.62) {
-          // Park / grass patch
           r = 0x55 + (park - 0.62) * 100;
           g = 0x70 + (park - 0.62) * 80;
           b = 0x42;
         } else {
-          // Asphalt with subtle variation
           const variation = fbm2D(wx * 0.05, wz * 0.05, 3);
           const v = (variation - 0.5) * 30;
           r = 0x6c + v; g = 0x68 + v; b = 0x60 + v;
         }
       }
 
-      // Forest belt: tree-canopy noise (dark/light green)
-      if (wx >= 800 && wx < 1100) {
+      // Forest belt: tree-canopy noise
+      if (wx >= 820 && wx < 1140) {
         const canopy = fbm2D(wx * 0.06, wz * 0.06, 4);
         const lit = fbm2D(wx * 0.2, wz * 0.2, 3) * 30 - 15;
         r = 0x36 + canopy * 30 + lit;
@@ -1705,8 +1691,8 @@ function bakeTerrainTexture(SIZE_X, SIZE_Z) {
         b = 0x2c + canopy * 18 + lit;
       }
 
-      // Foothills: chaparral with green/brown patches
-      if (wx >= 1100 && wx < 1700) {
+      // Foothills
+      if (wx >= 1140 && wx < 1740) {
         const greenness = fbm2D(wx * 0.008, wz * 0.008, 4);
         const detail = fbm2D(wx * 0.05, wz * 0.05, 3) * 20 - 10;
         if (greenness > 0.5) {
@@ -1716,8 +1702,8 @@ function bakeTerrainTexture(SIZE_X, SIZE_Z) {
         }
       }
 
-      // Mountains: rock variation, with snow at high elevation (height-aware)
-      if (wx >= 1700) {
+      // Mountains
+      if (wx >= 1740) {
         const elev = landHeight(wx, wz);
         const detail = fbm2D(wx * 0.03, wz * 0.03, 3) * 25 - 12;
         if (elev > 80) {
@@ -1744,15 +1730,13 @@ function bakeTerrainTexture(SIZE_X, SIZE_Z) {
   }
   ctx.putImageData(imgData, 0, 0);
 
-  // ---- Draw street grid in city band ----
-  // City spans x: 45..780, z: -1500..1500 (matches city placement)
-  // Street widths: ~3m (small), ~6m (boulevards every 5 blocks)
-  const BLOCK = 22; // street spacing in world units
+  // ---- Draw street grid in city band (80..820) ----
+  const BLOCK = 22;
   ctx.strokeStyle = '#3c3a36';
   ctx.lineWidth = 2 * wScale;
   ctx.beginPath();
-  for (let bx = 45; bx < 800; bx += BLOCK) {
-    const isBoulevard = ((bx - 45) / BLOCK) % 5 === 0;
+  for (let bx = 80; bx < 820; bx += BLOCK) {
+    const isBoulevard = ((bx - 80) / BLOCK) % 5 === 0;
     ctx.lineWidth = (isBoulevard ? 4.5 : 2.0) * wScale;
     if (isBoulevard) { ctx.stroke(); ctx.beginPath(); }
     ctx.moveTo(wx2px(bx), wz2py(-1500));
@@ -1763,8 +1747,8 @@ function bakeTerrainTexture(SIZE_X, SIZE_Z) {
     const isBoulevard = ((bz + 1500) / BLOCK) % 5 === 0;
     ctx.lineWidth = (isBoulevard ? 4.5 : 2.0) * wScale;
     if (isBoulevard) { ctx.stroke(); ctx.beginPath(); }
-    ctx.moveTo(wx2px(45), wz2py(bz));
-    ctx.lineTo(wx2px(800), wz2py(bz));
+    ctx.moveTo(wx2px(80), wz2py(bz));
+    ctx.lineTo(wx2px(820), wz2py(bz));
     if (isBoulevard) { ctx.stroke(); ctx.beginPath(); }
   }
   ctx.stroke();
@@ -1773,27 +1757,26 @@ function bakeTerrainTexture(SIZE_X, SIZE_Z) {
   ctx.strokeStyle = '#444240';
   ctx.lineWidth = 5 * wScale;
   ctx.beginPath();
-  ctx.moveTo(wx2px(42), wz2py(-1500));
-  ctx.lineTo(wx2px(42), wz2py(1500));
+  ctx.moveTo(wx2px(78), wz2py(-1500));
+  ctx.lineTo(wx2px(78), wz2py(1500));
   ctx.stroke();
-  // Lane markings
   ctx.strokeStyle = '#d4c060';
   ctx.lineWidth = 0.6 * wScale;
   ctx.setLineDash([8 * wScale, 12 * wScale]);
   ctx.beginPath();
-  ctx.moveTo(wx2px(42), wz2py(-1500));
-  ctx.lineTo(wx2px(42), wz2py(1500));
+  ctx.moveTo(wx2px(78), wz2py(-1500));
+  ctx.lineTo(wx2px(78), wz2py(1500));
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // A couple of mountain roads (zigzag)
+  // A couple of mountain roads
   ctx.strokeStyle = '#5a5246';
   ctx.lineWidth = 2.5 * wScale;
   for (let z0 = -800; z0 < 1000; z0 += 600) {
     ctx.beginPath();
-    let x = 800, z = z0;
+    let x = 1140, z = z0;
     ctx.moveTo(wx2px(x), wz2py(z));
-    while (x < 1700) {
+    while (x < 1740) {
       x += 80;
       z += (Math.random() - 0.5) * 90;
       ctx.lineTo(wx2px(x), wz2py(z));
@@ -1814,43 +1797,61 @@ function bakeTerrainTexture(SIZE_X, SIZE_Z) {
 function makeForest() {
   const group = new THREE.Group();
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3220, roughness: 0.95, flatShading: true, fog: true });
-  const leafMat1 = new THREE.MeshStandardMaterial({ color: 0x3a5630, roughness: 0.9, flatShading: true, fog: true });
-  const leafMat2 = new THREE.MeshStandardMaterial({ color: 0x466a3a, roughness: 0.9, flatShading: true, fog: true });
+  const leafMat = new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true, fog: true });
 
-  // Tree templates (simple cone + trunk)
   const trunkGeo = new THREE.CylinderGeometry(0.4, 0.5, 4, 5);
-  const leafGeoA = new THREE.ConeGeometry(2.5, 6, 6);
-  const leafGeoB = new THREE.ConeGeometry(2.0, 4.5, 6);
+  const leafGeo = new THREE.ConeGeometry(2.5, 6, 6);
 
-  // Forest belt: x = 800..1100, z = -1400..1400
-  const TREE_COUNT = 600;
+  // Collect tree placements
+  const placements = [];
   let rng = 0xa37b;
   const r = () => { rng = (rng * 1664525 + 1013904223) & 0xffffffff; return ((rng >>> 0) / 4294967295); };
 
-  for (let i = 0; i < TREE_COUNT; i++) {
-    const px = 800 + r() * 300;
+  for (let i = 0; i < 700; i++) {
+    const px = 820 + r() * 320;
     const pz = -1400 + r() * 2800;
-    const terrainY = landHeight(px, pz);
-
-    // Stagger: density falls off near edges
-    const xT = (px - 800) / 300;
+    const xT = (px - 820) / 320;
     if (r() > Math.sin(xT * Math.PI) * 0.95 + 0.1) continue;
-
-    const tree = new THREE.Group();
-    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-    trunk.position.y = 2;
-    tree.add(trunk);
-
-    const which = r() < 0.6;
-    const leaves = new THREE.Mesh(which ? leafGeoA : leafGeoB, r() < 0.5 ? leafMat1 : leafMat2);
-    leaves.position.y = which ? 6 : 5;
-    tree.add(leaves);
-
-    tree.position.set(px, ENV_GROUND_Y + terrainY, pz);
-    tree.scale.setScalar(0.7 + r() * 0.6);
-    tree.rotation.y = r() * Math.PI * 2;
-    group.add(tree);
+    const terrainY = landHeight(px, pz);
+    const scale = 0.7 + r() * 0.6;
+    const ry = r() * Math.PI * 2;
+    const greenA = r() < 0.5;
+    placements.push({ px, pz, terrainY, scale, ry, greenA });
   }
+
+  const N = placements.length;
+  const trunkInst = new THREE.InstancedMesh(trunkGeo, trunkMat, N);
+  const leafInst = new THREE.InstancedMesh(leafGeo, leafMat, N);
+  const leafColors = new Float32Array(N * 3);
+  const cA = new THREE.Color(0x3a5630);
+  const cB = new THREE.Color(0x466a3a);
+
+  const _m = new THREE.Matrix4();
+  const _q = new THREE.Quaternion();
+  const _s = new THREE.Vector3();
+  const _p = new THREE.Vector3();
+  for (let i = 0; i < N; i++) {
+    const pl = placements[i];
+    // Trunk: at y=ground+2*scale (cylinder base)
+    _q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), pl.ry);
+    _s.set(pl.scale, pl.scale, pl.scale);
+    _p.set(pl.px, ENV_GROUND_Y + pl.terrainY + 2 * pl.scale, pl.pz);
+    _m.compose(_p, _q, _s);
+    trunkInst.setMatrixAt(i, _m);
+    // Leaves: at y=ground+6*scale
+    _p.set(pl.px, ENV_GROUND_Y + pl.terrainY + 6 * pl.scale, pl.pz);
+    _m.compose(_p, _q, _s);
+    leafInst.setMatrixAt(i, _m);
+    const c = pl.greenA ? cA : cB;
+    leafColors[i * 3]     = c.r;
+    leafColors[i * 3 + 1] = c.g;
+    leafColors[i * 3 + 2] = c.b;
+  }
+  trunkInst.instanceMatrix.needsUpdate = true;
+  leafInst.instanceMatrix.needsUpdate = true;
+  leafInst.instanceColor = new THREE.InstancedBufferAttribute(leafColors, 3);
+  group.add(trunkInst);
+  group.add(leafInst);
 
   return group;
 }
@@ -1859,7 +1860,7 @@ function makeForest() {
 /* ---- Ocean ---- */
 function makeOcean() {
   const SIZE = 6000;
-  const geo = new THREE.PlaneGeometry(SIZE, SIZE, 80, 80);
+  const geo = new THREE.PlaneGeometry(SIZE, SIZE, 40, 40);
   geo.rotateX(-Math.PI / 2);
 
   const mat = new THREE.ShaderMaterial({
@@ -1971,100 +1972,113 @@ function makeOcean() {
 function makeCity() {
   const group = new THREE.Group();
 
-  // Material variants for that painterly BMX look
-  const matLight = new THREE.MeshStandardMaterial({ color: 0xc8c2b0, roughness: 0.85, flatShading: true, fog: true });
-  const matMid   = new THREE.MeshStandardMaterial({ color: 0x9a8e78, roughness: 0.85, flatShading: true, fog: true });
-  const matDark  = new THREE.MeshStandardMaterial({ color: 0x5a5246, roughness: 0.85, flatShading: true, fog: true });
-  const matRoof  = new THREE.MeshStandardMaterial({ color: 0x44403a, roughness: 0.9, flatShading: true, fog: true });
-  const mats = [matLight, matMid, matDark];
-
-  // Window-emitting material (uses MeshStandardMaterial with emissive controlled at runtime)
+  // Single material per group; colors get baked per-instance via instanceColor
+  const matBuilding = new THREE.MeshStandardMaterial({ roughness: 0.85, flatShading: true, fog: true });
   const matWin = new THREE.MeshStandardMaterial({
     color: 0x1a1c20,
     emissive: 0xffd388,
-    emissiveIntensity: 0.0, // animated by setTimeOfDay
+    emissiveIntensity: 0.0,
     roughness: 0.5,
     flatShading: true,
-    fog: true
+    fog: true,
+    transparent: true,
+    opacity: 0.6
   });
   group.userData.windowMat = matWin;
 
-  // Shared geometries (we instance via cloned meshes for simplicity & lowpoly count)
   const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 
-  // Seeded RNG so the city is deterministic
+  // First pass: collect building specs so we know exact instance count
+  const specs = [];
   let rng = 0xc173;
   const r = () => { rng = (rng * 1664525 + 1013904223) & 0xffffffff; return ((rng >>> 0) / 4294967295); };
 
-  // Generate city in a strip from x=45 (just past beach) to x=780 (forest start)
-  // Width along Z: ±1500 — much larger now
-  const CITY_X_START = 45;
-  const CITY_X_END = 780;
+  const CITY_X_START = 80;       // beach is now 0..80
+  const CITY_X_END = 820;
   const CITY_Z_HALF = 1500;
-
-  // Block grid: street layout (~ every 22 units, matches texture)
   const BLOCK_X = 22;
   const BLOCK_Z = 22;
 
+  // Three building color tones (LA-style)
+  const colors = [
+    new THREE.Color(0xc8c2b0),
+    new THREE.Color(0x9a8e78),
+    new THREE.Color(0x5a5246),
+  ];
+  const roofColor = new THREE.Color(0x44403a);
+
   for (let bx = CITY_X_START; bx < CITY_X_END; bx += BLOCK_X) {
     for (let bz = -CITY_Z_HALF; bz < CITY_Z_HALF; bz += BLOCK_Z) {
-      // Skip some blocks to leave gaps for streets/parks
-      const skipR = r();
-      if (skipR < 0.12) continue;
-
-      // Per-block: 2-5 buildings (denser)
+      if (r() < 0.12) continue;
       const buildingsHere = 2 + Math.floor(r() * 4);
       for (let bi = 0; bi < buildingsHere; bi++) {
-        // Building footprint
         const fpw = 3 + r() * 8;
         const fpd = 3 + r() * 8;
-
-        // Heights — LA-style: most are 2-8 stories, a downtown cluster has tall buildings
-        // Downtown center positioned at (cityX, cityZ) where cityX ~ 220 and cityZ ~ -100
-        const dx = bx - 220;
+        const dx = bx - 280;
         const dz = bz - (-100);
         const downtownDist = Math.sqrt(dx * dx + dz * dz);
         const downtownness = Math.max(0, 1 - downtownDist / 250);
-        const baseH = 2 + r() * 4;
-        // Skyscrapers more likely in downtown
-        const skyscraper = r() < (0.02 + downtownness * 0.18);
+        const baseH = 0.8 + r() * 1.6;
+        const skyscraper = r() < (0.01 + downtownness * 0.18);
         let h;
-        if (skyscraper) {
-          h = baseH + 18 + r() * 50;  // 20-70m
-        } else {
-          h = baseH + downtownness * (3 + r() * 12);
-        }
-
+        if (skyscraper) h = baseH + 12 + r() * 50;
+        else h = baseH + downtownness * (1.5 + r() * 4);
         const px = bx + (r() - 0.5) * (BLOCK_X - fpw - 2);
         const pz = bz + (r() - 0.5) * (BLOCK_Z - fpd - 2);
-
         const terrainY = landHeight(px, pz);
-        const matIdx = Math.floor(r() * 3);
-        const wallMat = mats[matIdx];
-
-        const walls = new THREE.Mesh(boxGeo, wallMat);
-        walls.scale.set(fpw, h, fpd);
-        walls.position.set(px, ENV_GROUND_Y + terrainY + h / 2, pz);
-        group.add(walls);
-
-        // Roof box
-        if (h > 4) {
-          const roof = new THREE.Mesh(boxGeo, matRoof);
-          roof.scale.set(fpw * 0.95, 0.4, fpd * 0.95);
-          roof.position.set(px, ENV_GROUND_Y + terrainY + h + 0.2, pz);
-          group.add(roof);
-        }
-
-        // Windows (emissive at night)
-        if (h > 5) {
-          const winSlab = new THREE.Mesh(boxGeo, matWin);
-          winSlab.scale.set(fpw + 0.04, h * 0.85, fpd + 0.04);
-          winSlab.position.set(px, ENV_GROUND_Y + terrainY + h / 2 + 0.2, pz);
-          group.add(winSlab);
-        }
+        const colIdx = Math.floor(r() * 3);
+        specs.push({ px, pz, fpw, fpd, h, terrainY, colIdx });
       }
     }
   }
+
+  // Build instanced meshes (one for walls, one for roofs, one for windows)
+  const N = specs.length;
+  const wallsMesh = new THREE.InstancedMesh(boxGeo, matBuilding, N);
+  wallsMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+  const wallColors = new Float32Array(N * 3);
+
+  let roofCount = 0, winCount = 0;
+  for (const s of specs) {
+    if (s.h > 4) roofCount++;
+    if (s.h > 5) winCount++;
+  }
+  const roofMesh = new THREE.InstancedMesh(boxGeo, new THREE.MeshStandardMaterial({ color: roofColor, roughness: 0.9, flatShading: true, fog: true }), roofCount);
+  const winMesh = new THREE.InstancedMesh(boxGeo, matWin, winCount);
+
+  const _m = new THREE.Matrix4();
+  let ri = 0, wi = 0;
+  for (let i = 0; i < N; i++) {
+    const s = specs[i];
+    // Walls
+    _m.makeScale(s.fpw, s.h, s.fpd);
+    _m.setPosition(s.px, ENV_GROUND_Y + s.terrainY + s.h / 2, s.pz);
+    wallsMesh.setMatrixAt(i, _m);
+    const c = colors[s.colIdx];
+    wallColors[i * 3]     = c.r;
+    wallColors[i * 3 + 1] = c.g;
+    wallColors[i * 3 + 2] = c.b;
+    // Roof
+    if (s.h > 4) {
+      _m.makeScale(s.fpw * 0.95, 0.4, s.fpd * 0.95);
+      _m.setPosition(s.px, ENV_GROUND_Y + s.terrainY + s.h + 0.2, s.pz);
+      roofMesh.setMatrixAt(ri++, _m);
+    }
+    // Window slab
+    if (s.h > 5) {
+      _m.makeScale(s.fpw + 0.04, s.h * 0.85, s.fpd + 0.04);
+      _m.setPosition(s.px, ENV_GROUND_Y + s.terrainY + s.h / 2 + 0.2, s.pz);
+      winMesh.setMatrixAt(wi++, _m);
+    }
+  }
+  wallsMesh.instanceColor = new THREE.InstancedBufferAttribute(wallColors, 3);
+  wallsMesh.instanceMatrix.needsUpdate = true;
+  roofMesh.instanceMatrix.needsUpdate = true;
+  winMesh.instanceMatrix.needsUpdate = true;
+
+  group.add(wallsMesh);
+  group.add(roofMesh);
+  group.add(winMesh);
 
   return group;
 }
@@ -2145,8 +2159,8 @@ function makePalms() {
       palm.add(frond);
     }
 
-    // Place along beach (x=10..38, z range wide)
-    const px = 10 + Math.random() * 28;
+    // Place along beach (x=20..70 on the wider beach band, z range wide)
+    const px = 20 + Math.random() * 50;
     const pz = (Math.random() - 0.5) * 800;
     const terrainY = landHeight(px, pz);
     palm.position.set(px, ENV_GROUND_Y + terrainY, pz);
@@ -2290,12 +2304,16 @@ const islandsGroup = makeIslands();
 scene.add(islandsGroup);
 const palmsGroup = makePalms();
 scene.add(palmsGroup);
-const gullsGroup = makeGulls();
-scene.add(gullsGroup);
-// Two airplanes at different altitudes (small GA at low alt, jet at high alt)
-const planeMesh = makePlane({ accent: 0x2860a8, altRange: [80, 220], speed: 35, scale: 1.0 });
+// Gulls removed for performance — focus on clouds + city/coast
+// const gullsGroup = makeGulls();
+// scene.add(gullsGroup);
+const gullsGroup = null;
+// Two airplanes at REALISTIC altitudes
+// GA (small Cessna): cruise 1000-3000m → 200-600 scene units, ~50 m/s = 10 units/s
+const planeMesh = makePlane({ accent: 0x2860a8, altRange: [200, 600], speed: 10, scale: 1.0 });
 scene.add(planeMesh);
-const planeMesh2 = makePlane({ accent: 0xc83a3a, altRange: [380, 620], speed: 90, scale: 1.6 });
+// Jet (commercial): cruise 9000-12000m → 1800-2400 scene units, ~240 m/s = 48 units/s
+const planeMesh2 = makePlane({ accent: 0xc83a3a, altRange: [1800, 2400], speed: 48, scale: 2.5 });
 scene.add(planeMesh2);
 
 /* =====================================================
@@ -2318,24 +2336,24 @@ function lerpColor(a, b, t, out) {
 
 const SKY_KEYS = [
   // Deep night
-  { h: 0,  top: 0x020610, horizon: 0x0a1428, ground: 0x000308, sun: 0x202840, ambient: 0x101830, sunI: 0.0, ambI: 0.18, fogD: 0.0042 },
+  { h: 0,  top: 0x020610, horizon: 0x0a1428, ground: 0x000308, sun: 0x202840, ambient: 0x101830, sunI: 0.0, ambI: 0.18, fogD: 0.0011 },
   // Pre-dawn
-  { h: 5,  top: 0x081428, horizon: 0x2a2840, ground: 0x080a14, sun: 0x402840, ambient: 0x1a2030, sunI: 0.05, ambI: 0.22, fogD: 0.0048 },
+  { h: 5,  top: 0x081428, horizon: 0x2a2840, ground: 0x080a14, sun: 0x402840, ambient: 0x1a2030, sunI: 0.05, ambI: 0.22, fogD: 0.0012 },
   // Sunrise (warm orange/pink)
-  { h: 6.5,top: 0x4a5478, horizon: 0xff9966, ground: 0x281a18, sun: 0xffaa55, ambient: 0x6a4a4a, sunI: 0.7, ambI: 0.45, fogD: 0.0050 },
+  { h: 6.5,top: 0x4a5478, horizon: 0xff9966, ground: 0x281a18, sun: 0xffaa55, ambient: 0x6a4a4a, sunI: 0.7, ambI: 0.45, fogD: 0.0013 },
   // Morning
-  { h: 9,  top: 0x2870c8, horizon: 0xa8d0ee, ground: 0x182838, sun: 0xfff0d0, ambient: 0x90a8c0, sunI: 1.05, ambI: 0.62, fogD: 0.0035 },
+  { h: 9,  top: 0x2870c8, horizon: 0xa8d0ee, ground: 0x182838, sun: 0xfff0d0, ambient: 0x90a8c0, sunI: 1.05, ambI: 0.62, fogD: 0.00088 },
   // Midday (clear blue)
-  { h: 13, top: 0x1a5fb8, horizon: 0xb8d8f0, ground: 0x182838, sun: 0xffffee, ambient: 0xa0b8d0, sunI: 1.2, ambI: 0.7, fogD: 0.0032 },
+  { h: 13, top: 0x1a5fb8, horizon: 0xb8d8f0, ground: 0x182838, sun: 0xffffee, ambient: 0xa0b8d0, sunI: 1.2, ambI: 0.7, fogD: 0.0008 },
   // Afternoon
-  { h: 16, top: 0x2068c0, horizon: 0xc0d8ee, ground: 0x182838, sun: 0xfff4d0, ambient: 0xa0b0c8, sunI: 1.1, ambI: 0.65, fogD: 0.0035 },
+  { h: 16, top: 0x2068c0, horizon: 0xc0d8ee, ground: 0x182838, sun: 0xfff4d0, ambient: 0xa0b0c8, sunI: 1.1, ambI: 0.65, fogD: 0.00088 },
   // Sunset (golden)
-  { h: 18.5, top: 0x8a5a78, horizon: 0xff7a3a, ground: 0x2a1818, sun: 0xff8848, ambient: 0x80505a, sunI: 0.85, ambI: 0.5, fogD: 0.0050 },
+  { h: 18.5, top: 0x8a5a78, horizon: 0xff7a3a, ground: 0x2a1818, sun: 0xff8848, ambient: 0x80505a, sunI: 0.85, ambI: 0.5, fogD: 0.0013 },
   // Dusk (purple)
-  { h: 20, top: 0x202850, horizon: 0x4a3458, ground: 0x10101c, sun: 0x603858, ambient: 0x303048, sunI: 0.15, ambI: 0.28, fogD: 0.0048 },
+  { h: 20, top: 0x202850, horizon: 0x4a3458, ground: 0x10101c, sun: 0x603858, ambient: 0x303048, sunI: 0.15, ambI: 0.28, fogD: 0.0012 },
   // Night
-  { h: 22, top: 0x040820, horizon: 0x101830, ground: 0x000308, sun: 0x202840, ambient: 0x141a2a, sunI: 0.0, ambI: 0.2, fogD: 0.0042 },
-  { h: 24, top: 0x020610, horizon: 0x0a1428, ground: 0x000308, sun: 0x202840, ambient: 0x101830, sunI: 0.0, ambI: 0.18, fogD: 0.0042 },
+  { h: 22, top: 0x040820, horizon: 0x101830, ground: 0x000308, sun: 0x202840, ambient: 0x141a2a, sunI: 0.0, ambI: 0.2, fogD: 0.0011 },
+  { h: 24, top: 0x020610, horizon: 0x0a1428, ground: 0x000308, sun: 0x202840, ambient: 0x101830, sunI: 0.0, ambI: 0.18, fogD: 0.0011 },
 ];
 
 const _tmpA = new THREE.Color(), _tmpB = new THREE.Color();
@@ -2421,8 +2439,8 @@ function setTimeOfDay(hours) {
   envUniforms.uAmbient.value.copy(s.ambient);
   envUniforms.uAmbientI.value = s.ambI;
 
-  // Fog: tint to horizon, density slightly higher at night/sunset
-  scene.fog.color.copy(s.horizon).multiplyScalar(0.6);
+  // Fog: tinted to MATCH the sky's horizon color so distant geometry blends seamlessly
+  scene.fog.color.copy(s.horizon);
   scene.fog.density = s.fogD;
 
   // Update env shader fog uniforms (each material has its own copy of fog refs)
@@ -2724,12 +2742,9 @@ function addHorizonCompanions(parent, def, tex, baseHeight) {
 }
 
 function etageBaseHeight(def) {
-  // Visual offset by etage for compositional distinction
-  if (def.etage === 'High') return 60;
-  if (def.etage === 'Middle') return 25;
-  if (def.etage === 'Low') return -2;
-  if (def.etage === 'Vertical') return -5; // CB starts low
-  return 0;
+  // Use the average of the cloud's typical altitude band, in scene units
+  const avgFt = (def.altMin_ft + def.altMax_ft) / 2;
+  return ENV_GROUND_Y + avgFt * FT_TO_UNITS;
 }
 
 /* =====================================================
@@ -2755,12 +2770,12 @@ function buildCloudField(typeKey, densityMultiplier = 1.0) {
   container.userData.def = def;
   container.userData.isField = true;
 
-  // Number of clouds in field — much larger now for the "infinite" feel
-  const baseCount = (def.abbr === 'Cu' || def.abbr === 'Sc') ? 22 : 18;
-  const count = Math.max(8, Math.round(baseCount * (0.6 + densityMultiplier * 0.5)));
+  // Many more clouds for "sky filled with cumulus" look
+  const baseCount = (def.abbr === 'Cu' || def.abbr === 'Sc') ? 80 : 65;
+  const count = Math.max(40, Math.round(baseCount * (0.7 + densityMultiplier * 0.6)));
 
-  // Per-cloud density reduced more aggressively since there are many more clouds
-  const perCloudDensity = densityMultiplier * (def.abbr === 'Ci' ? 0.32 : 0.22);
+  // Each individual cloud is smaller (so total particle count stays reasonable)
+  const perCloudDensity = densityMultiplier * (def.abbr === 'Ci' ? 0.18 : 0.13);
 
   // Shared texture
   const tex = buildPuffTexture({
@@ -2770,14 +2785,12 @@ function buildCloudField(typeKey, densityMultiplier = 1.0) {
     seed: typeKey.charCodeAt(0) + typeKey.charCodeAt(1)
   });
 
-  // Layout: scatter clouds in a much larger area for "infinite" sky feeling
-  const fieldRadius = 800;
+  // HUGE field radius — covers visible scene up to the horizon
+  const fieldRadius = 3500;
   const baseHeight = etageBaseHeight(def);
 
   // Use a low-discrepancy (golden angle) distribution
   const golden = Math.PI * (3 - Math.sqrt(5));
-  // Seeded RNG so the field looks deterministic per cloud type — gives a consistent
-  // "this Cumulus pattern" feel rather than re-shuffling on every minor update.
   const seedBase = (typeKey.charCodeAt(0) * 73 + typeKey.charCodeAt(1) * 31) & 0xffff;
   let rngState = seedBase;
   function srand() {
@@ -2786,23 +2799,23 @@ function buildCloudField(typeKey, densityMultiplier = 1.0) {
   }
 
   for (let i = 0; i < count; i++) {
-    // Spiral with seeded jitter
+    // sqrt(t) gives uniform 2D disk distribution
     const t = (i + 0.5) / count;
-    const r = Math.sqrt(t) * fieldRadius * (0.4 + srand() * 0.8);
+    const r = Math.sqrt(t) * fieldRadius * (0.55 + srand() * 0.7);
     const theta = i * golden + srand() * 0.6;
-    const px = Math.cos(theta) * r + (srand() - 0.5) * 60;
-    const pz = Math.sin(theta) * r + (srand() - 0.5) * 60;
-    const py = (srand() - 0.5) * 14;
+    const px = Math.cos(theta) * r + (srand() - 0.5) * 80;
+    const pz = Math.sin(theta) * r + (srand() - 0.5) * 80;
+    // Vertical variation: realistic clouds at slightly different altitudes
+    const py = (srand() - 0.5) * (15 + r * 0.02);
 
-    // Per-instance scale variation — bigger spread makes the field feel less uniform
-    const scaleVar = 0.45 + srand() * 1.0;
+    // Distant clouds slightly smaller (perspective)
+    const distFactor = 1 - (r / fieldRadius) * 0.35;
+    const scaleVar = (0.6 + srand() * 0.9) * distFactor;
 
-    // Build a sub-cloud
     const sub = buildSingleClump(def, tex, perCloudDensity, i * 17.31);
     sub.position.set(px, py, pz);
     sub.scale.setScalar(scaleVar);
     sub.rotation.y = srand() * Math.PI * 2;
-    // Mark sub-cloud's "home" position so wind drift can wrap it cleanly
     sub.userData.homePos = sub.position.clone();
     sub.userData.scaleVar = scaleVar;
 
@@ -2954,7 +2967,10 @@ function buildSingleClump(def, tex, densityMultiplier, seedOffset) {
 let sceneMode = 'single'; // 'single' | 'field'
 
 function buildScene(typeKey, densityMultiplier = 1.0) {
-  if (sceneMode === 'field' && isFieldEligible(typeKey)) {
+  // For discrete cumulus-type clouds, ALWAYS render as a horizon-filling field
+  // (matches the "many clouds across the sky" reference photo).
+  // Sheet clouds (St, As, Cs, Ns) and Cumulonimbus stay as single formations.
+  if (isFieldEligible(typeKey)) {
     return buildCloudField(typeKey, densityMultiplier);
   }
   return buildCloud(typeKey, densityMultiplier);
@@ -2964,10 +2980,9 @@ function buildScene(typeKey, densityMultiplier = 1.0) {
    6b. CAMERA CONTROLS (orbit + zoom, manual override)
    ===================================================== */
 const camState = {
-  azimuth: 0,        // current orbit angle (radians)
-  azimuthAuto: 0,    // accumulator for auto orbit
-  radius: 220,
-  height: 18,
+  azimuth: Math.PI * 0.2,  // initial heading: looking towards ocean+coast slightly
+  radius: 80,              // close to camera origin (closer to a person standing on beach)
+  height: 6,               // low — slightly above human head height (1 unit = 5m, so 30m above ground? need ~2)
   targetY: 0,
   manual: false,
   lastInputTime: 0
@@ -3213,10 +3228,8 @@ function animate() {
     });
   }
 
-  // Seagull boids
-  if (gullsGroup) {
-    updateGulls(dt, elapsed);
-  }
+  // Gulls removed
+  // if (gullsGroup) updateGulls(dt, elapsed);
 
   // Plane waypoint navigation (two planes at different altitudes)
   updatePlane(planeMesh, dt, elapsed);
@@ -3231,7 +3244,7 @@ function animate() {
     if (currentCloudGroup.userData.isField) {
       // Field mode: drift entire sub-cloud groups (so they don't tear apart),
       // and wrap them across a large area to feel infinite.
-      const FIELD_WRAP = 900;
+      const FIELD_WRAP = 3500;
       currentCloudGroup.children.forEach(sub => {
         if (!sub.userData.homePos) return;
         sub.position.x += windVx * dt * 0.7;
@@ -3281,39 +3294,25 @@ function animate() {
       });
     }
 
-    // Camera: auto-orbit unless user interacted recently
-    const now = performance.now();
-    const sinceInput = now - camState.lastInputTime;
-    const autoActive = !camState.manual || (sinceInput > RESUME_AFTER && !dragging);
-    if (autoActive) {
-      camState.manual = false;
-      camState.azimuthAuto += dt * 0.04;
-      // Smoothly blend manual azimuth back toward auto
-      const targetAz = camState.azimuthAuto;
-      // gentle ease toward target
-      let delta = targetAz - camState.azimuth;
-      // Wrap delta into -π..π
-      delta = ((delta + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-      camState.azimuth += delta * Math.min(1, dt * 0.5);
-    } else {
-      camState.azimuthAuto = camState.azimuth; // keep auto in sync for smooth resume
-    }
-
+    // Camera: NO auto-orbit. User-driven only.
+    // Camera position is determined entirely by camState (azimuth/radius/height).
     const az = camState.azimuth;
-    const def = currentCloudGroup.userData.def;
-    const focusY = etageBaseHeight(def) * 0.4;
-    // Camera height adapts to cloud étage so user always has a good view angle
-    let baseCamY = camState.height;
-    if (def.etage === 'High') baseCamY = camState.height + 22;
-    else if (def.etage === 'Middle') baseCamY = camState.height + 10;
-    else if (def.etage === 'Vertical') baseCamY = camState.height + 4;
+
+    // Look towards the horizon: slight upward angle to see clouds + city
+    // Camera sits at low altitude (just above the beach), pointing roughly horizontal
     camera.position.x = Math.sin(az) * camState.radius;
     camera.position.z = Math.cos(az) * camState.radius;
-    camera.position.y = Math.max(ENV_GROUND_Y + 8, baseCamY + Math.sin(elapsed * 0.2) * 1.5);
-    camera.lookAt(0, focusY, 0);
+    camera.position.y = Math.max(ENV_GROUND_Y + 1.5, camState.height);
+
+    // Look slightly up so clouds & sky are visible (focus point is in the distance, slightly elevated)
+    const lookDist = 400;
+    const focusX = -Math.sin(az) * lookDist;
+    const focusZ = -Math.cos(az) * lookDist;
+    const focusY = ENV_GROUND_Y + 30;  // looking up at horizon-ish level
+    camera.lookAt(focusX, focusY, focusZ);
 
     // Update compass — show camera bearing relative to north (-Z)
-    const bearing = (Math.atan2(camera.position.x, camera.position.z) * 180 / Math.PI + 360) % 360;
+    const bearing = (Math.atan2(camera.position.x - focusX, camera.position.z - focusZ) * 180 / Math.PI + 360) % 360;
     const needle = document.getElementById('compass-needle');
     if (needle) needle.style.transform = `rotate(${bearing}deg)`;
   }
@@ -3361,7 +3360,7 @@ function updateInfoCard(typeKey) {
       <span class="abbr">${def.abbr}</span>
       <span class="etage">${def.etage} Étage</span>
     </div>
-    <div class="cloud-name">${def.name}${sceneMode === 'field' && isFieldEligible(typeKey) ? ` <span style="color: var(--accent); font-style: normal; font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; margin-left: 6px;">· FIELD MODE</span>` : ''}</div>
+    <div class="cloud-name">${def.name}</div>
     <div class="cloud-desc">${def.desc}</div>
 
     <div class="stat-grid">
@@ -3429,70 +3428,9 @@ function setCloud(key) {
 
 cloudSelect.addEventListener('change', e => setCloud(e.target.value));
 
-/* Mode toggle (single / field) — desktop + mobile in sync */
-const modeToggleEls = [
-  document.getElementById('mode-toggle'),
-  document.getElementById('m-mode-toggle')
-].filter(Boolean);
-
-function setMode(newMode) {
-  // If switching to field but current cloud isn't eligible, auto-switch to Cumulus (most common field)
-  if (newMode === 'field' && !isFieldEligible(cloudSelect.value)) {
-    cloudSelect.value = 'Cu';
-    // Mirror to mobile
-    if (mCloudSelect) mCloudSelect.value = 'Cu';
-  }
-  sceneMode = newMode;
-  modeToggleEls.forEach(group => {
-    group.querySelectorAll('button').forEach(b => {
-      b.classList.toggle('active', b.dataset.mode === sceneMode);
-    });
-  });
-  // Rebuild scene with new mode
-  buildScene(cloudSelect.value, densityMult);
-  updateInfoCard(cloudSelect.value);
-  if (typeof syncMobileInfo === 'function') syncMobileInfo();
-  // Reset camera radius
-  camState.manual = false;
-  camState.radius = (sceneMode === 'field' && isFieldEligible(cloudSelect.value)) ? 480 : 220;
-}
-
-function refreshModeToggleEnablement() {
-  const eligible = isFieldEligible(cloudSelect.value);
-  modeToggleEls.forEach(group => {
-    const fieldBtn = group.querySelector('button[data-mode="field"]');
-    if (fieldBtn) {
-      fieldBtn.disabled = false;  // always enabled now (auto-switches cloud if needed)
-      fieldBtn.title = eligible
-        ? 'Field: scattered cloud field (multiple instances across the sky)'
-        : 'Field: switch to scattered cumulus pattern (this cloud type is not field-able, will auto-switch to Cu)';
-    }
-    const singleBtn = group.querySelector('button[data-mode="single"]');
-    if (singleBtn) singleBtn.title = 'Single: one detailed formation in front + horizon clouds';
-  });
-  // If user was in field but cloud changed to ineligible, snap back to single visually
-  // (the buildScene() switch already handles the rendering, but the toggle should reflect it)
-  if (sceneMode === 'field' && !eligible) {
-    // Don't snap back automatically — the user might switch to a Cu next.
-    // Instead, just visually mark single as active (since buildScene falls back to it)
-    modeToggleEls.forEach(group => {
-      group.querySelectorAll('button').forEach(b => {
-        b.classList.toggle('active', b.dataset.mode === 'single');
-      });
-    });
-  }
-}
-
-modeToggleEls.forEach(group => {
-  group.addEventListener('click', e => {
-    const btn = e.target.closest('button');
-    if (!btn || btn.disabled) return;
-    setMode(btn.dataset.mode);
-  });
-});
-
-// Refresh toggle eligibility whenever cloud changes
-cloudSelect.addEventListener('change', refreshModeToggleEnablement);
+// Mode toggle removed — buildScene now picks single/field automatically per cloud type
+function setMode() {}
+function refreshModeToggleEnablement() {}
 
 document.getElementById('btn-randomize').addEventListener('click', () => {
   let next;
@@ -3614,7 +3552,7 @@ function initQuizRenderer() {
 
   // Quiz uses the SAME scene as the main view (so it shows the beach environment),
   // just with its own camera. We swap clouds in/out as needed.
-  quizCamera = new THREE.PerspectiveCamera(55, w / h, 0.5, 6000);
+  quizCamera = new THREE.PerspectiveCamera(55, w / h, 0.5, 12000);
   quizCamera.position.set(0, 18, 200);
 }
 
@@ -3778,18 +3716,20 @@ function quizAnimate() {
 
   if (quizCloudGroup) {
     const def = quizCloudGroup.userData.def;
-    const orbitR = 200;
-    quizCamera.position.x = Math.sin(elapsed * 0.08) * orbitR;
-    quizCamera.position.z = Math.cos(elapsed * 0.08) * orbitR;
-    quizCamera.position.y = Math.max(ENV_GROUND_Y + 8, 18 + Math.sin(elapsed * 0.3) * 3);
-    quizCamera.lookAt(0, etageBaseHeight(def) * 0.4, 0);
+    // Static camera: low, looking up at the cloud across the bay
+    // Same vibe as main camera but fixed
+    const cloudY = etageBaseHeight(def);
+    // Distance scales with cloud height — high clouds need camera further back to fit them in frame
+    const dist = Math.max(180, cloudY * 1.5);
+    quizCamera.position.set(0, ENV_GROUND_Y + 6, dist);
+    quizCamera.lookAt(0, cloudY * 0.85, 0);
+
     quizCloudGroup.children.forEach(s => {
       if (!s.userData.basePos) return;
       s.position.y = s.userData.basePos.y + Math.sin(elapsed * 0.5 + s.userData.bobPhase) * 0.1;
     });
   }
   quizClock.getDelta();
-  // Render the MAIN scene (which now contains quizCloudGroup) with the quiz camera
   quizRenderer.render(scene, quizCamera);
   quizAnimId = requestAnimationFrame(quizAnimate);
 }
