@@ -2547,27 +2547,27 @@ function buildCloud(typeKey, densityMultiplier = 1.0) {
     const [scaleX, scaleY, scaleZ] = def.scale;
 
     if (def.isCb) {
-      // CB: tower base + anvil at top
+      // CB: massive tower + anvil. Should tower above the city (city is ~62 units tall at downtown).
       const t = i / partCount;
       if (t < 0.55) {
-        // Tower (vertical cylinder, expanding upward)
-        const towerH = t / 0.55; // 0..1
+        // Tower: rises from baseHeight to baseHeight + 250 units, expanding outward
+        const towerH = t / 0.55;
         const ang = Math.random() * Math.PI * 2;
-        const radius = (8 + towerH * 26) * (0.6 + Math.random() * 0.5);
+        const radius = (30 + towerH * 90) * (0.6 + Math.random() * 0.5);  // 30..170 units wide
         px = Math.cos(ang) * radius;
         pz = Math.sin(ang) * radius;
-        py = baseHeight + towerH * 70 + (Math.random() - 0.5) * 8;
-        const s = scaleX * (0.85 + Math.random() * 0.6);
+        py = baseHeight + towerH * 230 + (Math.random() - 0.5) * 20;
+        const s = scaleX * (1.6 + Math.random() * 1.2);
         sx = s; sy = s * (0.85 + Math.random() * 0.4);
       } else {
-        // Anvil (wide flat top)
+        // Anvil: massive flat top
         const anvilT = (t - 0.55) / 0.45;
         const ang = Math.random() * Math.PI * 2;
-        const radius = 30 + anvilT * 90 + Math.random() * 18;
+        const radius = 90 + anvilT * 280 + Math.random() * 50;  // 90..420 units wide
         px = Math.cos(ang) * radius;
         pz = Math.sin(ang) * radius;
-        py = baseHeight + 70 + Math.random() * 14 - anvilT * 4;
-        const s = scaleX * (1.4 + Math.random() * 0.8);
+        py = baseHeight + 230 + Math.random() * 30 - anvilT * 12;
+        const s = scaleX * (2.6 + Math.random() * 1.5);
         sx = s * 1.3; sy = s * 0.7;
       }
     } else if (def.puffy) {
@@ -2655,10 +2655,10 @@ function buildCloud(typeKey, densityMultiplier = 1.0) {
     group.add(sprite);
   }
 
-  // CB extra: dark base shadow particles
+  // CB extra: dark base shadow particles — wider and lower for proper anvil-cloud silhouette
   if (def.isCb) {
     const darkTex = buildPuffTexture({ size: 256, dense: true, seed: 99 });
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 60; i++) {
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
         map: darkTex,
         color: new THREE.Color(0x202830),
@@ -2669,9 +2669,9 @@ function buildCloud(typeKey, densityMultiplier = 1.0) {
         fog: true
       }));
       const ang = Math.random() * Math.PI * 2;
-      const rad = Math.random() * 28;
-      sprite.position.set(Math.cos(ang) * rad, baseHeight - 5 + Math.random() * 6, Math.sin(ang) * rad);
-      const s = 26 + Math.random() * 16;
+      const rad = Math.random() * 110;
+      sprite.position.set(Math.cos(ang) * rad, baseHeight - 8 + Math.random() * 12, Math.sin(ang) * rad);
+      const s = 80 + Math.random() * 50;
       sprite.scale.set(s, s * 0.8, 1);
       sprite.userData.driftX = (Math.random() - 0.5) * 0.15;
       sprite.userData.driftZ = (Math.random() - 0.5) * 0.15;
@@ -2680,6 +2680,12 @@ function buildCloud(typeKey, densityMultiplier = 1.0) {
       sprite.userData.basePos = sprite.position.clone();
       group.add(sprite);
     }
+  }
+
+  // For CB: shift the whole formation to a visible position over the ocean
+  // (otherwise it sits at origin which can be behind the camera)
+  if (def.isCb) {
+    group.position.set(-600, 0, 200);
   }
 
   scene.add(group);
@@ -2727,14 +2733,20 @@ function addHorizonCompanions(parent, def, tex, baseHeight) {
 }
 
 function etageBaseHeight(def) {
-  // For Stratus specifically, sit very low — almost like fog at ground level.
-  // Real-world stratus base can be 0–600m AGL (often surface contact).
-  if (def.abbr === 'St') {
-    return ENV_GROUND_Y + 8;  // ~40m above sea level — low fog-like layer
-  }
-  // For other types, use the average of the typical altitude band, in scene units
-  const avgFt = (def.altMin_ft + def.altMax_ft) / 2;
-  return ENV_GROUND_Y + avgFt * FT_TO_UNITS;
+  // VISUAL altitude — compressed range so all cloud types are within camera view.
+  // Real altitudes still shown in the info card (FL data) for accuracy.
+  // Each étage gets a fixed visual band:
+  //   Low (Cu, Sc, St)         → ~ 60 units  (≈ 300m visual)
+  //   Middle (Ac, As, Ns)       → ~ 120 units (≈ 600m visual)
+  //   High (Ci, Cc, Cs)         → ~ 200 units (≈ 1000m visual)
+  //   Vertical (Cb)             → spans 30..240 units
+  if (def.abbr === 'St')                        return ENV_GROUND_Y + 30;   // very low, fog-like
+  if (def.abbr === 'Cu' || def.abbr === 'Sc')   return ENV_GROUND_Y + 70;   // low cumulus deck
+  if (def.abbr === 'Ns')                        return ENV_GROUND_Y + 90;   // mid-low rain layer
+  if (def.abbr === 'Ac' || def.abbr === 'As')   return ENV_GROUND_Y + 130;  // middle
+  if (def.abbr === 'Cb')                        return ENV_GROUND_Y + 60;   // CB tower base
+  if (def.abbr === 'Ci' || def.abbr === 'Cc' || def.abbr === 'Cs') return ENV_GROUND_Y + 210; // high
+  return ENV_GROUND_Y + 100;
 }
 
 /* =====================================================
@@ -2763,69 +2775,65 @@ function buildCloudField(typeKey, densityMultiplier = 1.0) {
   container.userData.isField = true;
 
   // Per-type field configuration: count, particle density per cloud, vertical spread,
-  // base scale boost. Tuned so each genus reads correctly across the whole sky.
+  // base scale boost. Tuned so each genus reads correctly across the whole sky and
+  // matches the city scale (city is ~740 units = ~3.7km wide).
   let baseCount, perCloudDensity, yJitterAmp, scaleBoost, opacityBoost;
   if (def.abbr === 'St') {
-    // Stratus: low fog-like overcast — many large overlapping patches that drift near the surface
-    baseCount = 180;       // many clouds to fully cover the sky / ground
-    perCloudDensity = 0.32; // each patch is dense
-    yJitterAmp = 18;       // gentle height variation around the low base
-    scaleBoost = 2.6;      // each patch is much larger
+    // Stratus: low fog-like overcast — many large overlapping patches drifting near surface
+    baseCount = 200;
+    perCloudDensity = 0.40;
+    yJitterAmp = 22;
+    scaleBoost = 4.5;       // huge soft patches
     opacityBoost = 1.0;
   } else if (def.abbr === 'Ns') {
-    // Nimbostratus: thick rain-bearing overcast — covers everything
-    baseCount = 160;
-    perCloudDensity = 0.32;
-    yJitterAmp = 14;
-    scaleBoost = 2.4;
+    baseCount = 180;
+    perCloudDensity = 0.40;
+    yJitterAmp = 16;
+    scaleBoost = 4.0;
     opacityBoost = 1.0;
   } else if (def.abbr === 'As' || def.abbr === 'Cs') {
-    // Mid/high sheet — broad thin layer, larger patches
-    baseCount = 130;
-    perCloudDensity = 0.28;
-    yJitterAmp = 12;
-    scaleBoost = 2.2;
+    baseCount = 150;
+    perCloudDensity = 0.35;
+    yJitterAmp = 14;
+    scaleBoost = 3.6;
     opacityBoost = 1.0;
   } else if (def.abbr === 'Ci') {
-    // Cirrus: thin fibrous streaks — boost opacity since they're far away (fog dims them)
-    baseCount = 90;
-    perCloudDensity = 0.30;
-    yJitterAmp = 18;
-    scaleBoost = 1.9;
-    opacityBoost = 2.2;     // Cirrus default opacity is 0.32 — boost so it reads at altitude
+    // Cirrus: long thin streaks. Larger AND more opaque so they read clearly.
+    baseCount = 100;
+    perCloudDensity = 0.40;
+    yJitterAmp = 22;
+    scaleBoost = 3.4;
+    opacityBoost = 2.5;     // boost the thin Cirrus opacity (default 0.32)
   } else if (def.abbr === 'Cu') {
-    // Cumulus: discrete puffy clouds, the photo-reference look
-    baseCount = 95;
-    perCloudDensity = 0.32;
-    yJitterAmp = 16;
-    scaleBoost = 1.8;
+    // Cumulus: discrete puffy clouds — should read like the photo reference
+    baseCount = 110;
+    perCloudDensity = 0.42;
+    yJitterAmp = 20;
+    scaleBoost = 3.2;
     opacityBoost = 1.0;
   } else if (def.abbr === 'Sc') {
-    // Stratocumulus: rolls / lumps in patches — bigger than Cu, fewer gaps
-    baseCount = 110;
-    perCloudDensity = 0.32;
-    yJitterAmp = 14;
-    scaleBoost = 2.1;
+    baseCount = 130;
+    perCloudDensity = 0.40;
+    yJitterAmp = 16;
+    scaleBoost = 3.6;
     opacityBoost = 1.0;
   } else if (def.abbr === 'Ac') {
-    // Altocumulus: regular ripples (mackerel sky), mid-altitude
-    baseCount = 110;
-    perCloudDensity = 0.28;
-    yJitterAmp = 10;
-    scaleBoost = 1.7;
+    baseCount = 130;
+    perCloudDensity = 0.36;
+    yJitterAmp = 12;
+    scaleBoost = 3.0;
     opacityBoost = 1.0;
   } else if (def.abbr === 'Cc') {
-    // Cirrocumulus: small high ripples — many small patches
-    baseCount = 130;
-    perCloudDensity = 0.22;
-    yJitterAmp = 14;
-    scaleBoost = 1.5;
-    opacityBoost = 1.4;
+    baseCount = 150;
+    perCloudDensity = 0.30;
+    yJitterAmp = 16;
+    scaleBoost = 2.6;
+    opacityBoost = 1.5;
   } else {
-    baseCount = 90;
-    perCloudDensity = 0.28;
-    yJitterAmp = 14;
-    scaleBoost = 1.8;
+    baseCount = 100;
+    perCloudDensity = 0.36;
+    yJitterAmp = 16;
+    scaleBoost = 3.0;
     opacityBoost = 1.0;
   }
   const count = Math.max(50, Math.round(baseCount * (0.75 + densityMultiplier * 0.5)));
@@ -3372,7 +3380,7 @@ function animate() {
     const lookDist = 400;
     const focusX = -Math.sin(az) * lookDist;
     const focusZ = -Math.cos(az) * lookDist;
-    const focusY = ENV_GROUND_Y + 30;  // looking up at horizon-ish level
+    const focusY = ENV_GROUND_Y + 90;  // looking up at cloud altitude
     camera.lookAt(focusX, focusY, focusZ);
 
     // Update compass — show camera bearing relative to north (-Z)
@@ -3652,7 +3660,7 @@ function quizAnimate() {
   const lookDist = 400;
   const focusX = -Math.sin(az) * lookDist;
   const focusZ = -Math.cos(az) * lookDist;
-  quizCamera.lookAt(focusX, ENV_GROUND_Y + 30, focusZ);
+  quizCamera.lookAt(focusX, ENV_GROUND_Y + 90, focusZ);
 
   // Bob the sprites inside the quiz cloud (works for nested groups too)
   if (quizCloudGroup) {
