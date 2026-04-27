@@ -1859,10 +1859,11 @@ function makeForest() {
 }
 
 
-/* ---- Ocean ---- */
+/* ---- Ocean (calm, painterly, Witness-style) ---- */
 function makeOcean() {
   const SIZE = 6000;
-  const geo = new THREE.PlaneGeometry(SIZE, SIZE, 40, 40);
+  // Low-poly geometry — flat-ish water doesn't need many segments
+  const geo = new THREE.PlaneGeometry(SIZE, SIZE, 24, 24);
   geo.rotateX(-Math.PI / 2);
 
   const mat = new THREE.ShaderMaterial({
@@ -1881,93 +1882,71 @@ function makeOcean() {
     vertexShader: /* glsl */`
       uniform float uTime;
       varying vec3 vWorldPos;
-      varying vec3 vNormal;
-      float wave(vec2 p, vec2 dir, float wavelength, float speed, float amp, float t) {
-        float k = 6.283185 / wavelength;
-        float phase = dot(dir, p) * k - speed * t;
-        return amp * sin(phase);
-      }
       void main() {
+        // Ultra-subtle gentle bobbing — barely perceptible vertical motion
+        // No directional sine waves, just a tiny breathing displacement
         vec3 p = position;
-        float t = uTime * 0.4;  // slower wave motion
-        float h = 0.0;
-        h += wave(p.xz, normalize(vec2(1.0, 0.6)), 60.0, 0.6, 0.55, t);
-        h += wave(p.xz, normalize(vec2(-0.5, 1.0)), 38.0, 0.8, 0.30, t);
-        h += wave(p.xz, normalize(vec2(0.7, -0.3)), 22.0, 1.0, 0.16, t);
-        p.y += h;
-
-        float eps = 0.5;
-        float hx = wave(vec2(p.x + eps, p.z), normalize(vec2(1.0, 0.6)), 60.0, 0.6, 0.55, t)
-                 + wave(vec2(p.x + eps, p.z), normalize(vec2(-0.5, 1.0)), 38.0, 0.8, 0.30, t);
-        float hz = wave(vec2(p.x, p.z + eps), normalize(vec2(1.0, 0.6)), 60.0, 0.6, 0.55, t)
-                 + wave(vec2(p.x, p.z + eps), normalize(vec2(-0.5, 1.0)), 38.0, 0.8, 0.30, t);
-        vec3 nrm = normalize(vec3(h - hx, eps, h - hz));
-        vNormal = (modelMatrix * vec4(nrm, 0.0)).xyz;
-
+        p.y += sin(p.x * 0.012 + uTime * 0.25) * 0.15
+             + sin(p.z * 0.009 - uTime * 0.18) * 0.12;
         vec4 wp = modelMatrix * vec4(p, 1.0);
         vWorldPos = wp.xyz;
         gl_Position = projectionMatrix * viewMatrix * wp;
       }
     `,
     fragmentShader: /* glsl */`
-      uniform vec3 uSunDir;
+      uniform float uTime;
       uniform vec3 uSunColor;
       uniform float uSunInt;
+      uniform vec3 uHorizon;
       uniform vec3 uAmbient;
       uniform float uAmbientI;
-      uniform vec3 uHorizon;
       uniform vec3 uFogColor;
       uniform float uFogNear;
       uniform float uFogFar;
       varying vec3 vWorldPos;
-      varying vec3 vNormal;
+
+      // Hash & 2D noise for subtle surface variation
+      float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float noise(vec2 p){
+        vec2 i = floor(p), f = fract(p);
+        float a = hash(i), b = hash(i + vec2(1,0));
+        float c = hash(i + vec2(0,1)), d = hash(i + vec2(1,1));
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
 
       void main() {
-        vec3 N = normalize(vNormal);
-        vec3 V = normalize(cameraPosition - vWorldPos);
-        vec3 L = normalize(uSunDir);
+        // Two flat color tones blended subtly across the surface — no specular highlights, no sharp waves.
+        // Witness-style water: clean, painterly, mostly uniform.
+        vec3 deepWater = vec3(0.12, 0.34, 0.52);     // mid-blue, slightly muted
+        vec3 shallowWater = vec3(0.28, 0.55, 0.62);  // teal near shore
 
-        vec3 deep = vec3(0.04, 0.13, 0.22);
-        vec3 shallow = vec3(0.18, 0.40, 0.50);
-        // Shallower closer to coast (x near 0)
-        float coastProx = smoothstep(0.0, 200.0, abs(vWorldPos.x));
-        vec3 waterCol = mix(shallow, deep, coastProx);
+        // Coast proximity tint: shallow near x=0 (the beach line)
+        float coast = smoothstep(0.0, 350.0, abs(vWorldPos.x));
+        vec3 base = mix(shallowWater, deepWater, coast);
 
-        float ndl = max(dot(N, L), 0.0);
-        vec3 diffuse = waterCol * (uAmbient * uAmbientI + uSunColor * uSunInt * ndl * 0.4);
+        // Subtle painterly variation using low-frequency noise — gives the surface life without
+        // looking like sharp wave streaks
+        float n = noise(vWorldPos.xz * 0.004 + vec2(uTime * 0.02, 0.0));
+        n = n * 0.7 + noise(vWorldPos.xz * 0.012 - vec2(0.0, uTime * 0.03)) * 0.3;
+        base += (n - 0.5) * 0.06;
 
-        // Sun glint — softer, broader shimmer
-        vec3 R = reflect(-L, N);
-        float spec = pow(max(dot(R, V), 0.0), 60.0);
-        vec3 glint = uSunColor * spec * uSunInt * 1.2;
+        // Time-of-day tint: water picks up some ambient color
+        base = base * (uAmbient * uAmbientI + uSunColor * uSunInt * 0.45);
 
-        // Fresnel
-        float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
-        vec3 reflectionCol = mix(uHorizon, vec3(1.0), 0.2);
-        vec3 fresColor = reflectionCol * fres * (0.4 + uSunInt * 0.6);
-
-        // Foam: bright white on wave crests (where the surface is steep / high)
-        // Use the y-component of the normal — flatter normal = lower foam
-        float crestiness = 1.0 - abs(N.y);  // 0 flat, 1 steep
-        float foam = smoothstep(0.18, 0.32, crestiness) * 0.6 * (0.4 + uSunInt * 0.6);
-        // Foam is brighter near the shore
-        foam += smoothstep(40.0, 0.0, abs(vWorldPos.x)) * 0.25 * (0.4 + uSunInt * 0.6);
-
-        vec3 col = diffuse + glint + fresColor + vec3(foam);
-
+        // Linear fog
         float dist = length(vWorldPos - cameraPosition);
-        float fogFactor = smoothstep(uFogNear, uFogFar, length(vWorldPos - cameraPosition));
-        col = mix(col, uFogColor, clamp(fogFactor, 0.0, 1.0));
+        float fogFactor = smoothstep(uFogNear, uFogFar, dist);
+        vec3 col = mix(base, uFogColor, clamp(fogFactor, 0.0, 1.0));
 
-        gl_FragColor = vec4(col, 0.95);
+        gl_FragColor = vec4(col, 1.0);
       }
     `,
-    transparent: true,
     side: THREE.DoubleSide
   });
 
   const mesh = new THREE.Mesh(geo, mat);
-  // Center on ocean side: ocean reaches from x=-3000 inland to x=10 (slight overlap with terrain)
+  // Center on ocean side: from x=-5500 inland to x=500 (overlap with terrain hidden by beach)
   mesh.position.set(-2500, ENV_GROUND_Y - 0.3, 0);
   return mesh;
 }
@@ -1979,14 +1958,14 @@ function makeCity() {
   // Single material per group; colors get baked per-instance via instanceColor
   const matBuilding = new THREE.MeshStandardMaterial({ roughness: 0.85, flatShading: true, fog: true });
   const matWin = new THREE.MeshStandardMaterial({
-    color: 0x1a1c20,
+    color: 0x000000,           // black so when opacity ramps up the visible part is purely emissive
     emissive: 0xffd388,
     emissiveIntensity: 0.0,
     roughness: 0.5,
     flatShading: true,
     fog: true,
     transparent: true,
-    opacity: 0.6
+    opacity: 0.0               // start fully transparent during day
   });
   group.userData.windowMat = matWin;
 
@@ -2005,11 +1984,11 @@ function makeCity() {
 
   // Three building color tones (LA-style)
   const colors = [
-    new THREE.Color(0xc8c2b0),
-    new THREE.Color(0x9a8e78),
-    new THREE.Color(0x5a5246),
+    new THREE.Color(0xd4cfb8),  // light beige
+    new THREE.Color(0xb0a690),  // mid warm grey
+    new THREE.Color(0x8a7e6a),  // darker warm grey (still not too dark)
   ];
-  const roofColor = new THREE.Color(0x44403a);
+  const roofColor = new THREE.Color(0x6a6258);
 
   for (let bx = CITY_X_START; bx < CITY_X_END; bx += BLOCK_X) {
     for (let bz = -CITY_Z_HALF; bz < CITY_Z_HALF; bz += BLOCK_Z) {
@@ -2459,9 +2438,9 @@ function setTimeOfDay(hours) {
 
   // City window glow at night
   if (typeof cityGroup !== 'undefined' && cityGroup && cityGroup.userData.windowMat) {
-    // Lights ramp on as sun goes down
     const isDark = Math.max(0, Math.min(1, (-sd.y + 0.1) * 2.5));
     cityGroup.userData.windowMat.emissiveIntensity = isDark * 1.3;
+    cityGroup.userData.windowMat.opacity = isDark * 0.7;  // visible only at night
     envUniforms.uCityLights.value = isDark;
   }
 
@@ -2748,7 +2727,12 @@ function addHorizonCompanions(parent, def, tex, baseHeight) {
 }
 
 function etageBaseHeight(def) {
-  // Use the average of the cloud's typical altitude band, in scene units
+  // For Stratus specifically, sit very low — almost like fog at ground level.
+  // Real-world stratus base can be 0–600m AGL (often surface contact).
+  if (def.abbr === 'St') {
+    return ENV_GROUND_Y + 8;  // ~40m above sea level — low fog-like layer
+  }
+  // For other types, use the average of the typical altitude band, in scene units
   const avgFt = (def.altMin_ft + def.altMax_ft) / 2;
   return ENV_GROUND_Y + avgFt * FT_TO_UNITS;
 }
@@ -2758,7 +2742,9 @@ function etageBaseHeight(def) {
    ===================================================== */
 // Which cloud types make sense as a field (discrete formations).
 // Sheet/diffuse types (St, As, Cs, Ns) are inherently extended already; CB is too massive.
-const FIELD_ELIGIBLE = new Set(['Cu', 'Sc', 'Ac', 'Cc', 'Ci']);
+// All cloud genera EXCEPT Cumulonimbus render as horizon-filling fields.
+// Cb is a single massive formation (a thunderstorm cell).
+const FIELD_ELIGIBLE = new Set(['Cu', 'Sc', 'Ac', 'Cc', 'Ci', 'Cs', 'As', 'Ns', 'St']);
 
 function isFieldEligible(typeKey) {
   return FIELD_ELIGIBLE.has(typeKey);
@@ -2777,7 +2763,11 @@ function buildCloudField(typeKey, densityMultiplier = 1.0) {
   container.userData.isField = true;
 
   // Many more clouds for "sky filled with cumulus" look
-  const baseCount = (def.abbr === 'Cu' || def.abbr === 'Sc') ? 80 : 65;
+  // Sheet-types (St, As, Cs, Ns) need more clouds to look like overcast layers
+  let baseCount;
+  if (def.abbr === 'Cu' || def.abbr === 'Sc') baseCount = 80;
+  else if (def.sheet) baseCount = 110;       // overcast-style: more clouds for full coverage
+  else baseCount = 65;
   const count = Math.max(40, Math.round(baseCount * (0.7 + densityMultiplier * 0.6)));
 
   // Each individual cloud is smaller (so total particle count stays reasonable)
@@ -2795,6 +2785,10 @@ function buildCloudField(typeKey, densityMultiplier = 1.0) {
   const fieldRadius = 3500;
   const baseHeight = etageBaseHeight(def);
 
+  // For Stratus: large vertical spread so some clouds drift very low (fog-like) and others higher
+  // For other types: small spread (sticks to the genus's typical altitude band)
+  const yJitterAmp = (def.abbr === 'St') ? 30 : 15;
+
   // Use a low-discrepancy (golden angle) distribution
   const golden = Math.PI * (3 - Math.sqrt(5));
   const seedBase = (typeKey.charCodeAt(0) * 73 + typeKey.charCodeAt(1) * 31) & 0xffff;
@@ -2811,8 +2805,8 @@ function buildCloudField(typeKey, densityMultiplier = 1.0) {
     const theta = i * golden + srand() * 0.6;
     const px = Math.cos(theta) * r + (srand() - 0.5) * 80;
     const pz = Math.sin(theta) * r + (srand() - 0.5) * 80;
-    // Vertical variation: realistic clouds at slightly different altitudes
-    const py = (srand() - 0.5) * (15 + r * 0.02);
+    // Vertical variation
+    const py = (srand() - 0.5) * yJitterAmp;
 
     // Distant clouds slightly smaller (perspective)
     const distFactor = 1 - (r / fieldRadius) * 0.35;
@@ -3563,176 +3557,44 @@ function initQuizRenderer() {
 }
 
 function buildQuizCloud(typeKey) {
+  // Clean up any previous quiz cloud (and any prior main cloud)
   if (quizCloudGroup) {
-    quizCloudGroup.traverse(o => {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) {
-        if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
-        else o.material.dispose();
-      }
-    });
-    scene.remove(quizCloudGroup);
+    disposeGroup(quizCloudGroup);
+    quizCloudGroup = null;
+  }
+  if (currentCloudGroup) {
+    disposeGroup(currentCloudGroup);
+    currentCloudGroup = null;
   }
 
-  // Hide the main cloud while quiz is active so only the quiz cloud is visible
-  if (currentCloudGroup) currentCloudGroup.visible = false;
+  // Use the same scene-building pipeline the main view uses — produces a horizon-filling
+  // field for normal types, or a single Cb formation for Cumulonimbus.
+  buildScene(typeKey, 1.0);
 
-  // Build a single clean clump (no horizon companions) for clarity
-  const def = CLOUDS[typeKey];
-  const group = new THREE.Group();
-  group.userData.def = def;
-
-  const tex = buildPuffTexture({
-    size: 256,
-    fibrous: !!def.fibrous,
-    dense: !!def.dense,
-    seed: typeKey.charCodeAt(0) + typeKey.charCodeAt(1)
-  });
-  const baseColor = new THREE.Color(def.color[0]/255, def.color[1]/255, def.color[2]/255);
-  const partCount = Math.round(def.particles * 0.85);
-  const baseHeight = etageBaseHeight(def);
-
-  for (let i = 0; i < partCount; i++) {
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: tex,
-      color: baseColor,
-      transparent: true,
-      opacity: def.opacity,
-      depthWrite: false,
-      fog: true
-    }));
-    let px, py, pz, sx, sy;
-    const [spreadX, spreadY, spreadZ] = def.spread;
-    const [scaleX, scaleY, scaleZ] = def.scale;
-
-    if (def.isCb) {
-      const t = i / partCount;
-      if (t < 0.55) {
-        const towerH = t / 0.55;
-        const ang = Math.random() * Math.PI * 2;
-        const radius = (8 + towerH * 26) * (0.6 + Math.random() * 0.5);
-        px = Math.cos(ang) * radius;
-        pz = Math.sin(ang) * radius;
-        py = baseHeight + towerH * 70 + (Math.random() - 0.5) * 8;
-        const s = scaleX * (0.85 + Math.random() * 0.6);
-        sx = s; sy = s * (0.85 + Math.random() * 0.4);
-      } else {
-        const anvilT = (t - 0.55) / 0.45;
-        const ang = Math.random() * Math.PI * 2;
-        const radius = 30 + anvilT * 90 + Math.random() * 18;
-        px = Math.cos(ang) * radius;
-        pz = Math.sin(ang) * radius;
-        py = baseHeight + 70 + Math.random() * 14 - anvilT * 4;
-        const s = scaleX * (1.4 + Math.random() * 0.8);
-        sx = s * 1.3; sy = s * 0.7;
-      }
-    } else if (def.puffy) {
-      const clusterCount = 4;
-      const clusterIdx = i % clusterCount;
-      const clusterAng = (clusterIdx / clusterCount) * Math.PI * 2;
-      const clusterRad = 35 + clusterIdx * 12;
-      const ccx = Math.cos(clusterAng) * clusterRad;
-      const ccz = Math.sin(clusterAng) * clusterRad;
-      const lr = Math.pow(Math.random(), 0.6) * 18;
-      const la = Math.random() * Math.PI * 2;
-      px = ccx + Math.cos(la) * lr;
-      pz = ccz + Math.sin(la) * lr;
-      py = baseHeight + Math.pow(Math.random(), 1.5) * scaleY * 1.4 + Math.random() * 4;
-      const s = scaleX * (0.7 + Math.random() * 0.7);
-      sx = s; sy = s;
-    } else if (def.grid) {
-      const cols = Math.ceil(Math.sqrt(partCount));
-      const ix = i % cols;
-      const iz = Math.floor(i / cols);
-      const colsZ = Math.ceil(partCount / cols);
-      const stepX = spreadX / cols;
-      const stepZ = spreadZ / colsZ;
-      px = (ix - cols / 2) * stepX + (Math.random() - 0.5) * stepX * 0.4;
-      pz = (iz - colsZ / 2) * stepZ + (Math.random() - 0.5) * stepZ * 0.4;
-      py = baseHeight + (Math.random() - 0.5) * spreadY;
-      const s = scaleX * (0.7 + Math.random() * 0.5);
-      sx = s; sy = s * (def.abbr === 'Cc' ? 0.7 : 0.85);
-    } else if (def.fibrous) {
-      px = (Math.random() - 0.5) * spreadX;
-      pz = (Math.random() - 0.5) * spreadZ;
-      py = baseHeight + (Math.random() - 0.5) * spreadY;
-      const s = scaleX * (0.8 + Math.random() * 0.7);
-      sx = s; sy = scaleY * (0.8 + Math.random() * 0.5);
-    } else if (def.sheet) {
-      px = (Math.random() - 0.5) * spreadX;
-      pz = (Math.random() - 0.5) * spreadZ;
-      py = baseHeight + (Math.random() - 0.5) * spreadY;
-      const s = scaleX * (0.8 + Math.random() * 0.5);
-      sx = s; sy = scaleY * (1.0 + Math.random() * 0.6);
-    } else if (def.lumpy) {
-      const ang = Math.random() * Math.PI * 2;
-      const rad = Math.pow(Math.random(), 0.65) * spreadX * 0.5;
-      px = Math.cos(ang) * rad;
-      pz = Math.sin(ang) * rad;
-      py = baseHeight + (Math.random() - 0.5) * spreadY;
-      const s = scaleX * (0.7 + Math.random() * 0.6);
-      sx = s; sy = s * (0.7 + Math.random() * 0.4);
-    } else {
-      px = (Math.random() - 0.5) * spreadX;
-      pz = (Math.random() - 0.5) * spreadZ;
-      py = baseHeight + (Math.random() - 0.5) * spreadY;
-      const s = scaleX * (0.8 + Math.random() * 0.5);
-      sx = s; sy = scaleY * (0.8 + Math.random() * 0.5);
-    }
-
-    sprite.position.set(px, py, pz);
-    sprite.scale.set(sx, sy, 1);
-    sprite.userData.baseShade = 0.85 + Math.random() * 0.18;
-    const sunFacing = sprite.position.clone().normalize().dot(sunWorldDir);
-    sprite.userData.litFactor = Math.max(0, Math.min(1,
-      0.45 + sunFacing * 0.35 + (sprite.position.y - baseHeight) / 60 + (Math.random() - 0.5) * 0.25
-    ));
-    sprite.userData.basePos = sprite.position.clone();
-    sprite.userData.bobPhase = Math.random() * Math.PI * 2;
-    group.add(sprite);
-  }
-
-  // CB extra dark base
-  if (def.isCb) {
-    const darkTex = buildPuffTexture({ size: 256, dense: true, seed: 99 });
-    for (let i = 0; i < 40; i++) {
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: darkTex, color: new THREE.Color(0x202830),
-        transparent: true, opacity: 0.55, depthWrite: false, fog: true
-      }));
-      const ang = Math.random() * Math.PI * 2;
-      const rad = Math.random() * 28;
-      sprite.position.set(Math.cos(ang) * rad, baseHeight - 5 + Math.random() * 6, Math.sin(ang) * rad);
-      const s = 26 + Math.random() * 16;
-      sprite.scale.set(s, s * 0.8, 1);
-      sprite.userData.basePos = sprite.position.clone();
-      sprite.userData.bobPhase = Math.random() * Math.PI * 2;
-      group.add(sprite);
-    }
-  }
-
-  scene.add(group);
-  quizCloudGroup = group;
-  updateCloudLighting(group);
+  // buildScene wrote into currentCloudGroup; reassign it as the quiz cloud and clear main.
+  quizCloudGroup = currentCloudGroup;
+  currentCloudGroup = null;
 }
 
 function quizAnimate() {
   if (!quizRenderer) return;
   const elapsed = quizClock.elapsedTime;
 
-  if (quizCloudGroup) {
-    const def = quizCloudGroup.userData.def;
-    // Static camera: low, looking up at the cloud across the bay
-    // Same vibe as main camera but fixed
-    const cloudY = etageBaseHeight(def);
-    // Distance scales with cloud height — high clouds need camera further back to fit them in frame
-    const dist = Math.max(180, cloudY * 1.5);
-    quizCamera.position.set(0, ENV_GROUND_Y + 6, dist);
-    quizCamera.lookAt(0, cloudY * 0.85, 0);
+  // Static camera that mirrors the main view: low, near-ground, horizon-looking
+  // Slow, gentle azimuth drift so the user can see the cloud field move past
+  const az = elapsed * 0.06;
+  quizCamera.position.set(Math.sin(az) * 80, ENV_GROUND_Y + 6, Math.cos(az) * 80);
+  // Look toward distant horizon, slightly elevated so we see the clouds across the sky
+  const lookDist = 400;
+  const focusX = -Math.sin(az) * lookDist;
+  const focusZ = -Math.cos(az) * lookDist;
+  quizCamera.lookAt(focusX, ENV_GROUND_Y + 30, focusZ);
 
-    quizCloudGroup.children.forEach(s => {
-      if (!s.userData.basePos) return;
-      s.position.y = s.userData.basePos.y + Math.sin(elapsed * 0.5 + s.userData.bobPhase) * 0.1;
+  // Bob the sprites inside the quiz cloud (works for nested groups too)
+  if (quizCloudGroup) {
+    quizCloudGroup.traverse(o => {
+      if (!o.isSprite || !o.userData.basePos) return;
+      o.position.y = o.userData.basePos.y + Math.sin(elapsed * 0.5 + o.userData.bobPhase) * (o.userData.bobAmp || 0.1);
     });
   }
   quizClock.getDelta();
@@ -3764,19 +3626,15 @@ function setHighScore(s) {
 function endQuiz() {
   quizOverlay.classList.remove('active');
   if (quizAnimId) { cancelAnimationFrame(quizAnimId); quizAnimId = null; }
-  // Clean up: remove quiz cloud from main scene, restore main cloud visibility
+  // Clean up quiz cloud
   if (quizCloudGroup) {
-    quizCloudGroup.traverse(o => {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) {
-        if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
-        else o.material.dispose();
-      }
-    });
-    scene.remove(quizCloudGroup);
+    disposeGroup(quizCloudGroup);
     quizCloudGroup = null;
   }
-  if (currentCloudGroup) currentCloudGroup.visible = true;
+  // Rebuild the main scene cloud (the user's selection from before the quiz)
+  if (cloudSelect && cloudSelect.value) {
+    buildScene(cloudSelect.value, densityMult);
+  }
 }
 
 function buildQuizRound() {
