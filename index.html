@@ -2762,16 +2762,74 @@ function buildCloudField(typeKey, densityMultiplier = 1.0) {
   container.userData.def = def;
   container.userData.isField = true;
 
-  // Many more clouds for "sky filled with cumulus" look
-  // Sheet-types (St, As, Cs, Ns) need more clouds to look like overcast layers
-  let baseCount;
-  if (def.abbr === 'Cu' || def.abbr === 'Sc') baseCount = 80;
-  else if (def.sheet) baseCount = 110;       // overcast-style: more clouds for full coverage
-  else baseCount = 65;
-  const count = Math.max(40, Math.round(baseCount * (0.7 + densityMultiplier * 0.6)));
-
-  // Each individual cloud is smaller (so total particle count stays reasonable)
-  const perCloudDensity = densityMultiplier * (def.abbr === 'Ci' ? 0.18 : 0.13);
+  // Per-type field configuration: count, particle density per cloud, vertical spread,
+  // base scale boost. Tuned so each genus reads correctly across the whole sky.
+  let baseCount, perCloudDensity, yJitterAmp, scaleBoost, opacityBoost;
+  if (def.abbr === 'St') {
+    // Stratus: low fog-like overcast — many large overlapping patches that drift near the surface
+    baseCount = 180;       // many clouds to fully cover the sky / ground
+    perCloudDensity = 0.32; // each patch is dense
+    yJitterAmp = 18;       // gentle height variation around the low base
+    scaleBoost = 2.6;      // each patch is much larger
+    opacityBoost = 1.0;
+  } else if (def.abbr === 'Ns') {
+    // Nimbostratus: thick rain-bearing overcast — covers everything
+    baseCount = 160;
+    perCloudDensity = 0.32;
+    yJitterAmp = 14;
+    scaleBoost = 2.4;
+    opacityBoost = 1.0;
+  } else if (def.abbr === 'As' || def.abbr === 'Cs') {
+    // Mid/high sheet — broad thin layer, larger patches
+    baseCount = 130;
+    perCloudDensity = 0.28;
+    yJitterAmp = 12;
+    scaleBoost = 2.2;
+    opacityBoost = 1.0;
+  } else if (def.abbr === 'Ci') {
+    // Cirrus: thin fibrous streaks — boost opacity since they're far away (fog dims them)
+    baseCount = 90;
+    perCloudDensity = 0.30;
+    yJitterAmp = 18;
+    scaleBoost = 1.9;
+    opacityBoost = 2.2;     // Cirrus default opacity is 0.32 — boost so it reads at altitude
+  } else if (def.abbr === 'Cu') {
+    // Cumulus: discrete puffy clouds, the photo-reference look
+    baseCount = 95;
+    perCloudDensity = 0.32;
+    yJitterAmp = 16;
+    scaleBoost = 1.8;
+    opacityBoost = 1.0;
+  } else if (def.abbr === 'Sc') {
+    // Stratocumulus: rolls / lumps in patches — bigger than Cu, fewer gaps
+    baseCount = 110;
+    perCloudDensity = 0.32;
+    yJitterAmp = 14;
+    scaleBoost = 2.1;
+    opacityBoost = 1.0;
+  } else if (def.abbr === 'Ac') {
+    // Altocumulus: regular ripples (mackerel sky), mid-altitude
+    baseCount = 110;
+    perCloudDensity = 0.28;
+    yJitterAmp = 10;
+    scaleBoost = 1.7;
+    opacityBoost = 1.0;
+  } else if (def.abbr === 'Cc') {
+    // Cirrocumulus: small high ripples — many small patches
+    baseCount = 130;
+    perCloudDensity = 0.22;
+    yJitterAmp = 14;
+    scaleBoost = 1.5;
+    opacityBoost = 1.4;
+  } else {
+    baseCount = 90;
+    perCloudDensity = 0.28;
+    yJitterAmp = 14;
+    scaleBoost = 1.8;
+    opacityBoost = 1.0;
+  }
+  const count = Math.max(50, Math.round(baseCount * (0.75 + densityMultiplier * 0.5)));
+  perCloudDensity *= densityMultiplier;
 
   // Shared texture
   const tex = buildPuffTexture({
@@ -2781,13 +2839,9 @@ function buildCloudField(typeKey, densityMultiplier = 1.0) {
     seed: typeKey.charCodeAt(0) + typeKey.charCodeAt(1)
   });
 
-  // HUGE field radius — covers visible scene up to the horizon
+  // Field radius covers the visible scene up to the horizon
   const fieldRadius = 3500;
   const baseHeight = etageBaseHeight(def);
-
-  // For Stratus: large vertical spread so some clouds drift very low (fog-like) and others higher
-  // For other types: small spread (sticks to the genus's typical altitude band)
-  const yJitterAmp = (def.abbr === 'St') ? 30 : 15;
 
   // Use a low-discrepancy (golden angle) distribution
   const golden = Math.PI * (3 - Math.sqrt(5));
@@ -2808,9 +2862,10 @@ function buildCloudField(typeKey, densityMultiplier = 1.0) {
     // Vertical variation
     const py = (srand() - 0.5) * yJitterAmp;
 
-    // Distant clouds slightly smaller (perspective)
-    const distFactor = 1 - (r / fieldRadius) * 0.35;
-    const scaleVar = (0.6 + srand() * 0.9) * distFactor;
+    // Distant clouds slightly smaller (perspective) — but less aggressive falloff for high clouds
+    const distFalloff = (def.etage === 'High') ? 0.20 : 0.30;
+    const distFactor = 1 - (r / fieldRadius) * distFalloff;
+    const scaleVar = (0.7 + srand() * 0.8) * distFactor * scaleBoost;
 
     const sub = buildSingleClump(def, tex, perCloudDensity, i * 17.31);
     sub.position.set(px, py, pz);
@@ -2818,6 +2873,15 @@ function buildCloudField(typeKey, densityMultiplier = 1.0) {
     sub.rotation.y = srand() * Math.PI * 2;
     sub.userData.homePos = sub.position.clone();
     sub.userData.scaleVar = scaleVar;
+
+    // Apply opacity boost per-sprite (for Cirrus that needs to read at distance)
+    if (opacityBoost !== 1.0) {
+      sub.traverse(o => {
+        if (o.isSprite && o.material) {
+          o.material.opacity = Math.min(1, def.opacity * opacityBoost);
+        }
+      });
+    }
 
     container.add(sub);
   }
