@@ -6,7 +6,8 @@ pilots in training, and anyone curious about what's actually up there.
 
 Created with [Claude](https://claude.com/claude-code).
 
-![Cloude — coastal scene with cumulus across the sky](docs/screenshot.png)
+<img width="1909" height="941" alt="image" src="https://github.com/user-attachments/assets/24759b5a-9571-4ade-aa14-1f17bd21e168" />
+
 
 ---
 
